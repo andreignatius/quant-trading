@@ -106,7 +106,9 @@ def cointegration_analysis(data, asset1, asset2):
         print(f"Error in cointegration analysis between {asset1} and {asset2}: {e}")
 
 if __name__ == "__main__":
-    tickers = ['BZ=F', 'CL=F', 'USDCAD=X', 'USDNOK=X']
+    # tickers = ['BZ=F', 'CL=F', 'USDCAD=X', 'USDNOK=X']
+    tickers = [ 'BZ=F', 'CL=F', 'GC=F', 'SI=F', 'NG=F', \
+                'USDCAD=X', 'USDNOK=X', 'AUDUSD=X', 'NZDUSD=X', 'USDAUD=X', 'USDZAR=X', 'USDBRL=X']
     start_date = '2013-01-01'
     end_date = '2023-01-01'
     data = fetch_data(tickers, start_date, end_date)
