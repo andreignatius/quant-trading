@@ -2,19 +2,26 @@ import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.api as sm
+from statsmodels.tsa.stattools import adfuller
 from scipy.signal import find_peaks
-from gtda.homology import VietorisRipsPersistence  # Corrected import
-from gtda.plotting import plot_diagram  # Corrected import
+from gtda.homology import VietorisRipsPersistence
+from gtda.plotting import plot_diagram
+import numpy as np
 
-# Fetch data from Yahoo Finance
 def fetch_data(tickers, start_date, end_date):
-    data = yf.download(tickers, start=start_date, end=end_date)
-    return data['Close']
+    """Fetches closing prices for given tickers from Yahoo Finance."""
+    try:
+        data = yf.download(tickers, start=start_date, end=end_date)
+        return data['Close']
+    except Exception as e:
+        print(f"Error fetching data for {tickers}: {e}")
+        return pd.DataFrame()
 
-# Normalize data and plot with annotations in the legend
 def plot_data(data):
+    """Plots normalized price trends."""
     plt.figure(figsize=(14, 7))
-    max_values = data.max()  # Get maximum value for each series to normalize
+    max_values = data.max()
     for column in data.columns:
         normalized_series = data[column] / max_values[column]
         plt.plot(data.index, normalized_series, label=f"{column} (scaled by 1/{max_values[column]:.2f})")
@@ -25,100 +32,90 @@ def plot_data(data):
     plt.grid(True)
     plt.show()
 
-# Seasonal Analysis
-def seasonal_analysis(data):
-    monthly_data = data.resample('M').mean()
-    sns.lineplot(x=monthly_data.index, y=monthly_data['CL=F'])  # Example for WTI Crude
-    plt.title('Seasonal Trends in WTI Crude Prices')
+def seasonal_analysis(data, ticker):
+    """Performs and plots seasonal analysis on selected ticker data."""
+    if ticker in data.columns:
+        monthly_data = data[ticker].resample('M').mean()
+        sns.lineplot(x=monthly_data.index, y=monthly_data)
+        plt.title(f'Seasonal Trends in {ticker} Prices')
+        plt.show()
+
+def harmonic_analysis(data, ticker):
+    """Identifies and plots peak pricing events for the specified ticker."""
+    if ticker in data.columns:
+        series_data = data[ticker].dropna()
+        height = np.std(series_data) * 0.75  # Adjusted peak height
+        peaks, _ = find_peaks(series_data, height=height)
+        plt.figure(figsize=(10, 4))
+        plt.plot(series_data, label=f'{ticker} Prices')
+        plt.plot(series_data.index[peaks], series_data.iloc[peaks], "x", label='Peaks')
+        plt.title(f'Peak Pricing Events in {ticker}')
+        plt.xlabel('Date')
+        plt.ylabel('Price')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+def topological_data_analysis(data, ticker):
+    """Computes and plots a persistence diagram for specified ticker."""
+    if ticker in data.columns:
+        clean_data = data[ticker].dropna()
+        if clean_data.empty:
+            print("No data available for analysis after removing NaN values.")
+            return
+        tda = VietorisRipsPersistence(homology_dimensions=[0, 1], max_edge_length=2)
+        point_cloud = clean_data.to_numpy()
+        point_cloud_reshaped = point_cloud.reshape(1, -1, 1)
+        diagram = tda.fit_transform(point_cloud_reshaped)
+        plt.figure(figsize=(5, 5))
+        plot_diagram(diagram[0])
+        plt.title('Persistence Diagram for WTI Crude')
+        plt.xlabel('Birth')
+        plt.ylabel('Death')
+        plt.xlim([0, 2])
+        plt.ylim([0, 2])
+        plt.show()
+
+def correlation_analysis(data):
+    """Analyzes and plots correlation between commodities and currencies."""
+    plt.figure(figsize=(10, 6))
+    correlation_matrix = data.corr()
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+    plt.title('Correlation Matrix of Commodities and Currencies')
     plt.show()
 
-# # Harmonic Analysis
-# def harmonic_analysis(data):
-#     peaks, _ = find_peaks(data['CL=F'], height=0)
-#     plt.figure(figsize=(10, 4))
-#     plt.plot(data['CL=F'])
-#     plt.plot(peaks, data['CL=F'][peaks], "x")
-#     plt.title('Peak Pricing Events in WTI Crude Prices')
-#     plt.show()
+def cointegration_analysis(data, asset1, asset2):
+    """Tests for cointegration between two assets using the Engle-Granger method."""
+    try:
+        x = data[asset1].dropna()  # Clean asset1 data
+        y = data.loc[x.index, asset2].dropna()  # Align and clean asset2 data
 
-# def harmonic_analysis(data):
-#     data['CL=F'].dropna(inplace=True)  # Handle missing data
-#     mean_price = data['CL=F'].mean()
-#     std_price = data['CL=F'].std()
-#     min_height = mean_price + std_price  # Dynamic height based on data statistics
+        x, y = x.align(y, join='inner')  # Ensuring both series have the same dates
 
-#     peaks, _ = find_peaks(data['CL=F'], height=min_height, distance=20, prominence=1)
-#     plt.figure(figsize=(10, 4))
-#     plt.plot(data['CL=F'], label='WTI Crude Prices')
-#     plt.plot(peaks, data['CL=F'][peaks], "x", label='Peaks')
-#     plt.title('Peak Pricing Events in WTI Crude Prices')
-#     plt.xlabel('Date')
-#     plt.ylabel('Price')
-#     plt.legend()
-#     plt.grid(True)
-#     plt.show()
-# Harmonic Analysis
-def harmonic_analysis(data):
-    # Ensure data doesn't have missing values which can disrupt peak analysis
-    data = data.dropna(subset=['CL=F'])
-    
-    # Calculate dynamic height if necessary, or use a static value
-    # For illustration, we use a static height here; adjust as needed
-    height = 0
-    
-    # Find peaks
-    peaks, _ = find_peaks(data['CL=F'], height=height)
+        x = sm.add_constant(x)
+        result = sm.OLS(y, x).fit()
+        residuals = result.resid
+        adf_test = adfuller(residuals)
+        print(f'ADF Statistic: {adf_test[0]}')
+        print(f'p-value: {adf_test[1]}')
+        if adf_test[1] < 0.05:
+            print(f"{asset1} and {asset2} are cointegrated.")
+        else:
+            print(f"{asset1} and {asset2} are not cointegrated.")
+    except Exception as e:
+        print(f"Error in cointegration analysis between {asset1} and {asset2}: {e}")
 
-    # Plot the data
-    plt.figure(figsize=(10, 4))
-    plt.plot(data['CL=F'], label='WTI Crude Prices')  # Plot the crude prices
-
-    # Plot the peaks: convert indices to datetime index for correct plotting
-    plt.plot(data.index[peaks], data['CL=F'].iloc[peaks], "x", label='Peaks')  # Corrected peak plotting
-
-    # Adding plot title and labels
-    plt.title('Peak Pricing Events in WTI Crude Prices')
-    plt.xlabel('Date')
-    plt.ylabel('Price')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-def topological_data_analysis(data):
-    clean_data = data[['CL=F']].dropna()
-    if clean_data.empty:
-        print("No data available for analysis after removing NaN values.")
-        return
-
-    tda = VietorisRipsPersistence(homology_dimensions=[0, 1], max_edge_length=2)
-    point_cloud = clean_data.to_numpy()
-    point_cloud_reshaped = point_cloud.reshape(1, -1, 1)
-    diagram = tda.fit_transform(point_cloud_reshaped)
-
-    print(diagram)  # To see if there are any non-trivial topological features
-
-    plt.figure(figsize=(5, 5))
-    plot_diagram(diagram[0])
-    plt.title('Persistence Diagram for WTI Crude')
-    plt.xlabel('Birth')
-    plt.ylabel('Death')
-    plt.xlim([0, 2])  # Set limits based on your data
-    plt.ylim([0, 2])
-    plt.show()
-
-# Main execution block
 if __name__ == "__main__":
-    # Define the tickers and time period
     tickers = ['BZ=F', 'CL=F', 'USDCAD=X', 'USDNOK=X']
     start_date = '2013-01-01'
     end_date = '2023-01-01'
-
-    # Fetch and plot data
     data = fetch_data(tickers, start_date, end_date)
-    plot_data(data)
-
-    # Run analyses
-    seasonal_analysis(data)
-    harmonic_analysis(data)
-    topological_data_analysis(data)
+    if not data.empty:
+        plot_data(data)
+        seasonal_analysis(data, 'CL=F')
+        harmonic_analysis(data, 'CL=F')
+        topological_data_analysis(data, 'CL=F')
+        correlation_analysis(data)
+        cointegration_analysis(data, 'BZ=F', 'CL=F')  # Example cointegration test
+    else:
+        print("Data retrieval was unsuccessful.")
