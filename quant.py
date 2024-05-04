@@ -32,23 +32,79 @@ def seasonal_analysis(data):
     plt.title('Seasonal Trends in WTI Crude Prices')
     plt.show()
 
+# # Harmonic Analysis
+# def harmonic_analysis(data):
+#     peaks, _ = find_peaks(data['CL=F'], height=0)
+#     plt.figure(figsize=(10, 4))
+#     plt.plot(data['CL=F'])
+#     plt.plot(peaks, data['CL=F'][peaks], "x")
+#     plt.title('Peak Pricing Events in WTI Crude Prices')
+#     plt.show()
+
+# def harmonic_analysis(data):
+#     data['CL=F'].dropna(inplace=True)  # Handle missing data
+#     mean_price = data['CL=F'].mean()
+#     std_price = data['CL=F'].std()
+#     min_height = mean_price + std_price  # Dynamic height based on data statistics
+
+#     peaks, _ = find_peaks(data['CL=F'], height=min_height, distance=20, prominence=1)
+#     plt.figure(figsize=(10, 4))
+#     plt.plot(data['CL=F'], label='WTI Crude Prices')
+#     plt.plot(peaks, data['CL=F'][peaks], "x", label='Peaks')
+#     plt.title('Peak Pricing Events in WTI Crude Prices')
+#     plt.xlabel('Date')
+#     plt.ylabel('Price')
+#     plt.legend()
+#     plt.grid(True)
+#     plt.show()
 # Harmonic Analysis
 def harmonic_analysis(data):
-    peaks, _ = find_peaks(data['CL=F'], height=0)
+    # Ensure data doesn't have missing values which can disrupt peak analysis
+    data = data.dropna(subset=['CL=F'])
+    
+    # Calculate dynamic height if necessary, or use a static value
+    # For illustration, we use a static height here; adjust as needed
+    height = 0
+    
+    # Find peaks
+    peaks, _ = find_peaks(data['CL=F'], height=height)
+
+    # Plot the data
     plt.figure(figsize=(10, 4))
-    plt.plot(data['CL=F'])
-    plt.plot(peaks, data['CL=F'][peaks], "x")
+    plt.plot(data['CL=F'], label='WTI Crude Prices')  # Plot the crude prices
+
+    # Plot the peaks: convert indices to datetime index for correct plotting
+    plt.plot(data.index[peaks], data['CL=F'].iloc[peaks], "x", label='Peaks')  # Corrected peak plotting
+
+    # Adding plot title and labels
     plt.title('Peak Pricing Events in WTI Crude Prices')
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.legend()
+    plt.grid(True)
     plt.show()
 
-# Topological Data Analysis
+
 def topological_data_analysis(data):
-    tda = VietorisRipsPersistence()
-    point_cloud = data[['CL=F']].to_numpy()
-    diagram = tda.fit_transform(point_cloud.reshape(1, -1, 1))
+    clean_data = data[['CL=F']].dropna()
+    if clean_data.empty:
+        print("No data available for analysis after removing NaN values.")
+        return
+
+    tda = VietorisRipsPersistence(homology_dimensions=[0, 1], max_edge_length=2)
+    point_cloud = clean_data.to_numpy()
+    point_cloud_reshaped = point_cloud.reshape(1, -1, 1)
+    diagram = tda.fit_transform(point_cloud_reshaped)
+
+    print(diagram)  # To see if there are any non-trivial topological features
+
     plt.figure(figsize=(5, 5))
     plot_diagram(diagram[0])
     plt.title('Persistence Diagram for WTI Crude')
+    plt.xlabel('Birth')
+    plt.ylabel('Death')
+    plt.xlim([0, 2])  # Set limits based on your data
+    plt.ylim([0, 2])
     plt.show()
 
 # Main execution block
