@@ -9,6 +9,11 @@ from hurst import compute_Hc
 from sklearn.utils import resample
 from pandas import to_datetime, DateOffset
 
+from gtda.homology import VietorisRipsPersistence
+from gtda.diagrams import BettiCurve
+from gtda.time_series import SlidingWindow
+from gtda.plotting import plot_diagram
+
 
 class BaseModel:
     def __init__(self, file_path, train_start, train_end, test_start, test_end):
@@ -98,6 +103,7 @@ class BaseModel:
         # self.estimate_hurst_exponent()
         self.calculate_days_since_peaks_and_troughs()
         self.detect_fourier_signals()
+        self.calculate_betti_curves()
         # self.calculate_first_second_order_derivatives()
 
         # self.integrate_tbill_data()
@@ -518,7 +524,140 @@ class BaseModel:
                 self.data.at[today_date, ('PriceChangeSincePeak', instrument)] = price_change_since_peak
                 self.data.at[today_date, ('PriceChangeSinceTrough', instrument)] = price_change_since_bottom
 
+    def compute_persistence_norms(self, persistence_diagram):
+        """
+        Compute L1 and L2 persistence norms from a persistence diagram.
 
+        Parameters:
+        persistence_diagram (np.ndarray): Array of (birth, death) pairs.
+
+        Returns:
+        tuple: (L1_norm, L2_norm)
+        """
+        lifetimes = persistence_diagram[:, 1] - persistence_diagram[:, 0]
+        L1_norm = np.sum(np.abs(lifetimes))
+        L2_norm = np.sqrt(np.sum(lifetimes**2))
+        return L1_norm, L2_norm
+
+    def calculate_betti_curves(self, K=10, d=1, w=5):
+        """
+        Calculate Betti Curves and persistence norms for the given data.
+
+        :param K: Number of top nodes to consider.
+        :param d: Maximum Betti dimension.
+        :param w: Window size for rolling persistence diagram.
+        """
+        instruments = ['CL=F', 'GC=F', 'SI=F']  # Adjust based on your data
+
+        betti_curve_dfs = []
+        norm_dfs = []
+
+        for instrument in instruments:
+            print(f"Calculating Betti curves and persistence norms for {instrument}")
+
+            # Extract data for the instrument
+            data_series = self.data[('Adj Close', instrument)].dropna()
+
+            # Create sliding windows
+            sliding_window = SlidingWindow(size=w, stride=1)
+            windows = sliding_window.fit_transform(data_series.values.reshape(-1, 1))
+
+            # Compute Vietoris-Rips persistence diagrams
+            VR_persistence = VietorisRipsPersistence(homology_dimensions=list(range(d+1)))
+            diagrams = VR_persistence.fit_transform(windows)
+
+            # Compute Betti curves
+            betti_curves = BettiCurve(n_bins=w)
+            betti_curves_values = betti_curves.fit_transform(diagrams)
+
+            # Compute and store Betti curves
+            for dim in range(d + 1):
+                col_name = f'BettiCurve_{dim}_{instrument}'
+                betti_curve_series = pd.Series(betti_curves_values[:, dim, :].mean(axis=1), index=data_series.index[w-1:])
+                betti_curve_df = pd.DataFrame(betti_curve_series, columns=[col_name])
+                betti_curve_dfs.append(betti_curve_df)
+
+            # Compute and store persistence norms
+            L1_norms = []
+            L2_norms = []
+            for diagram in diagrams:
+                L1, L2 = self.compute_persistence_norms(diagram)
+                L1_norms.append(L1)
+                L2_norms.append(L2)
+            
+            norm_df = pd.DataFrame({
+                f'L1_Persistence_{instrument}': L1_norms,
+                f'L2_Persistence_{instrument}': L2_norms
+            }, index=data_series.index[w-1:])
+            norm_dfs.append(norm_df)
+
+        # Concatenate all Betti curve DataFrames and norm DataFrames
+        betti_curve_combined_df = pd.concat(betti_curve_dfs + norm_dfs, axis=1)
+
+        # Flatten the MultiIndex in self.data to a single level
+        self.data.columns = ['_'.join(col).strip() for col in self.data.columns.values]
+
+        # Join the Betti curves and norm DataFrame with the main data
+        self.data = self.data.join(betti_curve_combined_df, how='left')
+
+        # Restore the original MultiIndex structure if needed
+        self.data.columns = pd.MultiIndex.from_tuples([(col.split('_', 1)[0], col.split('_', 1)[1] if '_' in col else '') for col in self.data.columns])
+
+        print("check betti data: ", self.data)
+
+
+
+    # def calculate_betti_curves(self, K=10, d=1, w=5):
+    #     """
+    #     Calculate Betti Curves for the given data.
+
+    #     :param K: Number of top nodes to consider.
+    #     :param d: Maximum Betti dimension.
+    #     :param w: Window size for rolling persistence diagram.
+    #     """
+    #     instruments = ['CL=F', 'GC=F', 'SI=F']  # Adjust based on your data
+
+    #     betti_curve_dfs = []
+
+    #     for instrument in instruments:
+    #         print(f"Calculating Betti curves for {instrument}")
+
+    #         # Extract data for the instrument
+    #         data_series = self.data[('Adj Close', instrument)].dropna()
+
+    #         # Create sliding windows
+    #         sliding_window = SlidingWindow(size=w, stride=1)
+    #         windows = sliding_window.fit_transform(data_series.values.reshape(-1, 1))
+
+    #         # Compute Vietoris-Rips persistence diagrams
+    #         VR_persistence = VietorisRipsPersistence(homology_dimensions=list(range(d+1)))
+    #         diagrams = VR_persistence.fit_transform(windows)
+
+    #         # Compute Betti curves
+    #         betti_curves = BettiCurve(n_bins=w)
+    #         betti_curves_values = betti_curves.fit_transform(diagrams)
+
+    #         # Create a DataFrame for the Betti curves
+    #         for dim in range(d + 1):
+    #             col_name = f'BettiCurve_{dim}_{instrument}'
+    #             betti_curve_series = pd.Series(betti_curves_values[:, dim, :].mean(axis=1), index=data_series.index[w-1:])
+    #             betti_curve_df = pd.DataFrame(betti_curve_series, columns=[col_name])
+    #             betti_curve_dfs.append(betti_curve_df)
+
+    #     # Concatenate all Betti curve DataFrames
+    #     betti_curve_combined_df = pd.concat(betti_curve_dfs, axis=1)
+
+    #     # Flatten the MultiIndex in self.data to a single level
+    #     self.data.columns = ['_'.join(col).strip() for col in self.data.columns.values]
+
+    #     # Join the Betti curves DataFrame with the main data
+    #     self.data = self.data.join(betti_curve_combined_df, how='left')
+
+    #     # Restore the original MultiIndex structure if needed
+    #     self.data.columns = pd.MultiIndex.from_tuples([(col.split('_', 1)[0], col.split('_', 1)[1] if '_' in col else '') for col in self.data.columns])
+
+
+    #     print("check betti data: ", self.data)
 
 
     def calculate_first_second_order_derivatives(self):
