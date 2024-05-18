@@ -93,7 +93,7 @@ class BaseModel:
         self.perform_fourier_transform_analysis()
         self.calculate_stochastic_oscillator()
         # self.calculate_slow_stochastic_oscillator()
-        # self.construct_kalman_filter()
+        self.construct_kalman_filter()
         self.detect_rolling_peaks_and_troughs()
 
         # self.calculate_moving_averages_and_rsi()
@@ -105,7 +105,8 @@ class BaseModel:
         self.calculate_days_since_peaks_and_troughs()
         self.detect_fourier_signals()
         self.calculate_betti_curves()
-        # self.calculate_first_second_order_derivatives()
+        self.calculate_moving_averages_and_rsi()
+        self.calculate_first_second_order_derivatives()
 
         # self.integrate_tbill_data()
         # self.integrate_currency_account_data()
@@ -357,9 +358,9 @@ class BaseModel:
     
 
     # Calculating Moving Averages and RSI manually
-    def calculate_rsi(self, window=14):
+    def calculate_rsi(self, instrument, window=14):
         """ Calculate the Relative Strength Index (RSI) for a given dataset and window """
-        delta = self.data['Close'].diff()
+        delta = self.data[('Close', instrument)].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
 
@@ -368,14 +369,20 @@ class BaseModel:
         return rsi
 
     def calculate_moving_averages_and_rsi(self):
-        short_window = 5
-        long_window = 20
-        rsi_period = 14
-        self.data['Short_Moving_Avg'] = self.data['Close'].rolling(
-            window=short_window).mean()
-        self.data['Long_Moving_Avg'] = self.data['Close'].rolling(
-            window=long_window).mean()
-        self.data['RSI'] = self.calculate_rsi(window=rsi_period)
+        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
+        # Initialize Fourier signal columns for each instrument
+        for instrument in instruments:
+            print("11111check instrument: ", instrument)
+            short_window = 5
+            long_window = 20
+            rsi_period = 14
+            self.data[('Short_Moving_Avg', instrument)] = self.data[('Close', instrument)].rolling(
+                window=short_window).mean()
+            self.data[('Long_Moving_Avg', instrument)] = self.data[('Close', instrument)].rolling(
+                window=long_window).mean()
+            self.data[('RSI', instrument)] = self.calculate_rsi(instrument, window=rsi_period)
+
+        print("check_andre: ", self.data[('Short_Moving_Avg', 'AUDUSD=X')])
 
     # Bollinger Bands
     def calculate_bollinger_bands(self):
@@ -390,24 +397,28 @@ class BaseModel:
         self.data['Bollinger_PercentB'] = (self.data['Close'] - self.data['BBand_Lower']) / (self.data['BBand_Upper'] - self.data['BBand_Lower'])
 
     def construct_kalman_filter(self):
-        close_prices = self.data['Close']
-        # Construct a Kalman Filter
-        kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
+        # instruments = self.data.columns.get_level_values(1).unique()
+        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
+        
+        for instrument in instruments:
+            close_prices = self.data[('Close', instrument)]
+            # Construct a Kalman Filter
+            kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
 
-        # Use the observed data (close prices) to estimate the state
-        state_means, _ = kf.filter(close_prices.values)
+            # Use the observed data (close prices) to estimate the state
+            state_means, _ = kf.filter(close_prices.values)
 
-        # Convert state means to a Pandas Series for easy plotting
-        kalman_estimates = pd.Series(
-            state_means.flatten(), index=self.data.index)
+            # Convert state means to a Pandas Series for easy plotting
+            kalman_estimates = pd.Series(
+                state_means.flatten(), index=self.data.index)
 
-        # Combine the original close prices and Kalman Filter estimates
-        kalman_estimates = pd.DataFrame({
-            'KalmanFilterEst': kalman_estimates
-        })
-        self.data = self.data.join(kalman_estimates)
+            # Combine the original close prices and Kalman Filter estimates
+            kalman_estimates = pd.DataFrame({
+                ('KalmanFilterEst', instrument): kalman_estimates
+            })
+            self.data = self.data.join(kalman_estimates)
 
-        # print('KalmanFilterEst: ', self.data['KalmanFilterEst'])  # Display the first few rows of the dataframe
+            # print('KalmanFilterEst: ', self.data['KalmanFilterEst'])  # Display the first few rows of the dataframe
 
     # Function to estimate Hurst exponent over multiple sliding windows
     def estimate_hurst_exponent(self, window_size=100, step_size=1):
@@ -662,10 +673,14 @@ class BaseModel:
 
 
     def calculate_first_second_order_derivatives(self):
+        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
+        print("check instruments:", instruments)
+        print("self.data check135: ", self.data[('Short_Moving_Avg', 'AUDUSD=X')])
         # Calculate first and second order derivatives for selected features
         for feature in ['KalmanFilterEst', 'Short_Moving_Avg', 'Long_Moving_Avg']:
-            self.data[f'{feature}_1st_Deriv'] = self.data[feature].diff() * 100
-            self.data[f'{feature}_2nd_Deriv'] = self.data[f'{feature}_1st_Deriv'].diff() * 100
+            for instrument in instruments:
+                self.data[(f'{feature}_1st_Deriv', instrument)] = self.data[(feature, instrument)].diff() * 100
+                self.data[(f'{feature}_2nd_Deriv', instrument)] = self.data[(f'{feature}_1st_Deriv', instrument)].diff() * 100
 
         # self.data[f'KalmanFilterEst_1st_Deriv'] = self.data['KalmanFilterEst'].diff() * 100
         # self.data[f'KalmanFilterEst_2nd_Deriv'] = self.data[f'KalmanFilterEst_1st_Deriv'].diff() * 100
@@ -835,8 +850,8 @@ class BaseModel:
 
         feature_set = [
             # List your features here
-            # 'Short_Moving_Avg_2nd_Deriv',
-            # 'Long_Moving_Avg_2nd_Deriv',
+            'Short_Moving_Avg_2nd_Deriv',
+            'Long_Moving_Avg_2nd_Deriv',
             # 'RSI',
             # 'DaysSincePeak',
             # 'DaysSinceTrough',
@@ -856,6 +871,7 @@ class BaseModel:
         self.X_test = self.test_data[feature_set]
         self.y_train = self.train_data['Label']
         self.y_test = self.test_data['Label']
+        self.data.fillna(method='ffill', inplace=True)
 
         print("len X train: ", len(self.X_train))
         print("len X test: ", len(self.X_test))

@@ -53,13 +53,13 @@ def rolling_window_train_predict(data, start_date, end_date, train_duration_mont
         model.load_preprocess_data()  # Load and preprocess the data
         model.train_test_split_time_series()  # Split data into training and testing
         model.train()
-        data = model.retrieve_test_set()
+        test_data = model.retrieve_test_set()
 
         # Instantiate the TradingStrategy class
-        trading_strategy = TradingStrategy(model, data)
+        trading_strategy = TradingStrategy(model, test_data)
         trading_strategy.execute_trades()
         trading_results = trading_strategy.evaluate_performance()
-        
+
         # Collect results
         trade_logs.append(trading_results['Trade Log'])
         final_portfolio_values.append(trading_results['Final Portfolio Value'])
@@ -75,11 +75,11 @@ if __name__ == "__main__":
     tickers = ['BZ=F', 'CL=F', 'GC=F', 'SI=F', 'NG=F', 'USDCAD=X', 'USDNOK=X', 'AUDUSD=X', 'NZDUSD=X', 'USDAUD=X', 'USDZAR=X', 'USDBRL=X']
     start_date = '2013-01-01'
     end_date = '2023-01-01'
-    data = fetch_data(tickers, start_date, end_date)
+    raw_data = fetch_data(tickers, start_date, end_date)
 
-    if not data.empty:
+    if not raw_data.empty:
         trade_logs, final_values, interest_costs_total, transaction_costs_total = rolling_window_train_predict(
-            data, start_date, end_date, 12, 6  # 12 months training, 6 months testing
+            raw_data, start_date, end_date, 12, 6  # 12 months training, 6 months testing
         )
 
         print("Final trade logs:", trade_logs)
