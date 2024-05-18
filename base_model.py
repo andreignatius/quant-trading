@@ -73,6 +73,7 @@ class BaseModel:
                                 header=[0, 1],  # Assuming there are two header rows
                                 index_col=0,  # Date column as the index
                                 parse_dates=[0])  # Parse the index as date
+        print("check data: ", self.data.head())
         # Optional: Reinforce that the index is a datetime index (usually not needed)
         self.data.index = pd.to_datetime(self.data.index)
         # Convert data types to reduce memory usage
