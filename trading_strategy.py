@@ -1,7 +1,7 @@
 
 class TradingStrategy:
 
-    def __init__(self, model, data, start_cash=10000, trading_lot=7500, stop_loss_threshold=0.1, leverage_factor=1, margin_call_threshold=0.5, annual_interest_rate=0.03):
+    def __init__(self, model, data, start_cash=10000, trading_lot=7500, stop_loss_threshold=0.05, leverage_factor=4, margin_call_threshold=0.5, annual_interest_rate=0.03):
         self.model = model
         self.data = data
         self.cash = start_cash
@@ -34,11 +34,12 @@ class TradingStrategy:
             # if self.jpy_inventory > 0:
             #     self.daily_return_factors.append(1 + (daily_change_percentage * self.leverage_factor))
 
-            # is_stop_loss_triggered = self._check_stop_loss(usd_jpy_spot_rate, current_date)
+            is_stop_loss_triggered = self._check_stop_loss(usd_brl_spot_rate, current_date)
 
-            # if is_stop_loss_triggered:
-            #     continue
+            if is_stop_loss_triggered:
+                continue
 
+            # if prediction == 'Sell' and self.cash >= self.trading_lot:
             if prediction == 'Sell' and self.cash >= self.trading_lot and ( self.buy_price is None or (self.buy_price is not None and ( usd_brl_spot_rate < self.buy_price * 0.99 or usd_brl_spot_rate > self.buy_price * 1.01) ) ):
                 self._buy_brl(usd_brl_spot_rate, current_date)
                 print("buying USD BRL at : ", usd_brl_spot_rate, current_date)
@@ -123,11 +124,12 @@ class TradingStrategy:
         # return mtm - total_interest
         return mtm
 
-    def _check_stop_loss(self, usd_jpy_spot_rate, date):
-        if self.jpy_inventory > 0:
-            change_percentage = (usd_jpy_spot_rate - self.buy_price) / self.buy_price
+    def _check_stop_loss(self, usd_brl_spot_rate, date):
+        if self.brl_inventory > 0:
+            change_percentage = (usd_brl_spot_rate - self.buy_price) / self.buy_price
             if change_percentage * self.leverage_factor > self.stop_loss_threshold:
-                self._sell_jpy(usd_jpy_spot_rate, date, forced=True)
+                self._sell_brl(usd_brl_spot_rate, date, forced=True)
+                print("!!!STOP LOSS TRIGGERED!!!")
                 return True
         return False
 

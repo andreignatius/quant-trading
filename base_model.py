@@ -850,11 +850,11 @@ class BaseModel:
 
         feature_set = [
             # List your features here
-            'Short_Moving_Avg_2nd_Deriv',
-            'Long_Moving_Avg_2nd_Deriv',
+            # 'Short_Moving_Avg_2nd_Deriv',
+            # 'Long_Moving_Avg_2nd_Deriv',
             # 'RSI',
-            # 'DaysSincePeak',
-            # 'DaysSinceTrough',
+            'DaysSincePeak',
+            'DaysSinceTrough',
             'FourierSignalSell',
             'FourierSignalBuy',
             '%K',
