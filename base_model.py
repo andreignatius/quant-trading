@@ -749,7 +749,7 @@ class BaseModel:
 
     #     # Find the split point
     #     # self.split_idx = int(len(self.data) * (1 - test_size))
-    #     self.data.to_csv('final_dataset_with_new_features.csv')
+    #     self.data.to_csv('outputs/final_dataset_with_new_features.csv')
     #     # Split the data without shuffling
 
     #     # # Filter the data for training and testing periods
@@ -772,8 +772,8 @@ class BaseModel:
     #     sample_size = min(len(self.train_data), 1500)
     #     self.train_data = self.train_data.sample(n=sample_size, replace=False, weights=self.train_data['Weight'])
     #     self.train_data.sort_values('Date', inplace=True)
-    #     self.train_data.to_csv('inspect_training_set.csv')
-    #     self.test_data.to_csv('inspect_testing_set.csv')
+    #     self.train_data.to_csv('outputs/inspect_training_set.csv')
+    #     self.test_data.to_csv('/outputs/inspect_testing_set.csv')
 
     #     feature_set = [
     #          # 'Short_Moving_Avg',
@@ -845,8 +845,8 @@ class BaseModel:
         sample_size = min(len(self.train_data), 1500)
         self.train_data = self.train_data.sample(n=sample_size, replace=False, weights=self.train_data['Weight'])
         self.train_data.sort_index(inplace=True)
-        self.train_data.to_csv('inspect_training_set.csv')
-        self.test_data.to_csv('inspect_testing_set.csv')
+        self.train_data.to_csv('outputs/inspect_training_set.csv')
+        self.test_data.to_csv('outputs/inspect_testing_set.csv')
 
         feature_set = [
             # List your features here
