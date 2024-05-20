@@ -1,18 +1,14 @@
-import pandas as pd
-from scipy.fft import fft
 import numpy as np
+import pandas as pd
+from gtda.diagrams import BettiCurve
+from gtda.homology import VietorisRipsPersistence
+from gtda.time_series import SlidingWindow
+from hurst import compute_Hc
+from pandas import DateOffset, to_datetime
+from pykalman import KalmanFilter
+from scipy.fft import fft
 from scipy.signal import find_peaks
 from sklearn.preprocessing import StandardScaler
-from pykalman import KalmanFilter
-# import talib
-from hurst import compute_Hc
-from sklearn.utils import resample
-from pandas import to_datetime, DateOffset
-
-from gtda.homology import VietorisRipsPersistence
-from gtda.diagrams import BettiCurve
-from gtda.time_series import SlidingWindow
-from gtda.plotting import plot_diagram
 
 
 class BaseModel:
@@ -50,7 +46,7 @@ class BaseModel:
     def load_preprocess_data(self):
         # self.data = pd.read_csv(self.file_path)
         # # Load the data with proper handling of dates and potentially large file size
-        # self.data = pd.read_csv(self.file_path, 
+        # self.data = pd.read_csv(self.file_path,
         #                    parse_dates=['Date'],
         #                    index_col='Date',
         #                    header=[0, 1],  # Adjust based on how headers are structured
@@ -67,19 +63,22 @@ class BaseModel:
         # # Print the first few rows to verify correct loading
         # print(self.data.head())
 
-
         # Load the data
-        self.data = pd.read_csv(self.file_path, 
-                                header=[0, 1],  # Assuming there are two header rows
-                                index_col=0,  # Date column as the index
-                                parse_dates=[0])  # Parse the index as date
+        self.data = pd.read_csv(
+            self.file_path,
+            header=[0, 1],  # Assuming there are two header rows
+            index_col=0,  # Date column as the index
+            parse_dates=[0],
+        )  # Parse the index as date
         print("check data: ", self.data.head())
         # Optional: Reinforce that the index is a datetime index (usually not needed)
         self.data.index = pd.to_datetime(self.data.index)
         # Convert data types to reduce memory usage
-        for dtype in ['float64', 'int64']:
-            selected_dtype = 'float32' if dtype == 'float64' else 'int32'
-            self.data.loc[:, self.data.select_dtypes(include=[dtype]).columns] = self.data.select_dtypes(include=[dtype]).astype(selected_dtype)
+        for dtype in ["float64", "int64"]:
+            selected_dtype = "float32" if dtype == "float64" else "int32"
+            self.data.loc[
+                :, self.data.select_dtypes(include=[dtype]).columns
+            ] = self.data.select_dtypes(include=[dtype]).astype(selected_dtype)
 
         # Forward fill missing data
         self.data.ffill(inplace=True)
@@ -118,16 +117,38 @@ class BaseModel:
     #     self.data['Daily_Change_Open_to_Close'] = ( ( self.data['Open'] - self.data['Close'].shift(1) ) / self.data['Close'].shift(1) ) * 100
     def calculate_daily_percentage_change(self):
         # Loop through each instrument's 'Close' column
-        for instrument in ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']:
+        for instrument in [
+            "AUDUSD=X",
+            "BZ=F",
+            "CL=F",
+            "GC=F",
+            "NG=F",
+            "NZDUSD=X",
+            "SI=F",
+            "USDAUD=X",
+            "USDBRL=X",
+            "USDCAD=X",
+            "USDNOK=X",
+            "USDZAR=X",
+        ]:
             # Calculate daily percentage change for each 'Close' column
-            if ('Adj Close', instrument) in self.data.columns:
-                self.data[('Daily_Change', instrument)] = self.data[('Adj Close', instrument)].pct_change() * 100
+            if ("Adj Close", instrument) in self.data.columns:
+                self.data[("Daily_Change", instrument)] = (
+                    self.data[("Adj Close", instrument)].pct_change() * 100
+                )
 
             # Calculate the daily change from open to previous close
-            if ('Open', instrument) in self.data.columns and ('Adj Close', instrument) in self.data.columns:
-                self.data[('Daily_Change_Open_to_Close', instrument)] = (
-                    (self.data[('Open', instrument)] - self.data[('Adj Close', instrument)].shift(1)) / self.data[('Adj Close', instrument)].shift(1)) * 100
-
+            if ("Open", instrument) in self.data.columns and (
+                "Adj Close",
+                instrument,
+            ) in self.data.columns:
+                self.data[("Daily_Change_Open_to_Close", instrument)] = (
+                    (
+                        self.data[("Open", instrument)]
+                        - self.data[("Adj Close", instrument)].shift(1)
+                    )
+                    / self.data[("Adj Close", instrument)].shift(1)
+                ) * 100
 
     # def perform_fourier_transform_analysis(self):
     #     # Fourier Transform Analysis
@@ -160,7 +181,7 @@ class BaseModel:
     #         'Amplitude': significant_amplitudes,
     #         'DaysPerCycle': days_per_cycle
     #     })
-    def perform_fourier_transform_analysis(self, instrument='CL=F'):
+    def perform_fourier_transform_analysis(self, instrument="CL=F"):
         # Convert self.train_end to datetime if it's a string
         self.train_end = to_datetime(self.train_end)
 
@@ -173,7 +194,9 @@ class BaseModel:
         print("check222: ", self.data.index)
 
         # Filter data within the date range and for a specific instrument
-        data_window = self.data.loc[(self.data.index >= d1) & (self.data.index < d2), ('Adj Close', instrument)]
+        data_window = self.data.loc[
+            (self.data.index >= d1) & (self.data.index < d2), ("Adj Close", instrument)
+        ]
         print("data_window: ", data_window)
 
         # Convert the series to numpy array for FFT
@@ -182,23 +205,28 @@ class BaseModel:
         T = 1.0  # Assuming daily data, so the period is 1 day
         close_fft = fft(close_prices)
         fft_freq = np.fft.fftfreq(N, T)
-        positive_frequencies = fft_freq[:N//2]
-        positive_fft_values = 2.0/N * np.abs(close_fft[0:N//2])
+        positive_frequencies = fft_freq[: N // 2]
+        positive_fft_values = 2.0 / N * np.abs(close_fft[0 : N // 2])
         amplitude_threshold = 0.1  # This can be adjusted based on your data scale
-        significant_peaks, _ = find_peaks(positive_fft_values, height=amplitude_threshold)
+        significant_peaks, _ = find_peaks(
+            positive_fft_values, height=amplitude_threshold
+        )
         significant_frequencies = positive_frequencies[significant_peaks]
         significant_amplitudes = positive_fft_values[significant_peaks]
         days_per_cycle = 1 / significant_frequencies
 
         # Store the results in a DataFrame
-        self.fft_features = pd.DataFrame({
-            'Frequency': significant_frequencies,
-            'Amplitude': significant_amplitudes,
-            'DaysPerCycle': days_per_cycle
-        })
+        self.fft_features = pd.DataFrame(
+            {
+                "Frequency": significant_frequencies,
+                "Amplitude": significant_amplitudes,
+                "DaysPerCycle": days_per_cycle,
+            }
+        )
 
-
-    def calculate_stochastic_oscillator(self, k_window=14, d_window=3, slow_k_window=3, instrument='CL=F'):
+    def calculate_stochastic_oscillator(
+        self, k_window=14, d_window=3, slow_k_window=3, instrument="CL=F"
+    ):
         """
         Calculate the Stochastic Oscillator.
         %K = (Current Close - Lowest Low)/(Highest High - Lowest Low) * 100
@@ -213,20 +241,24 @@ class BaseModel:
         """
         # Calculate %K
         # Use MultiIndex to specify levels if DataFrame has multi-level columns
-        # Adjust instrument as needed or generalize for multiple instruments        
+        # Adjust instrument as needed or generalize for multiple instruments
         # Calculate %K
-        low_min = self.data[('Adj Close', instrument)].rolling(window=k_window).min()
-        high_max = self.data[('Adj Close', instrument)].rolling(window=k_window).max()
-        current_close = self.data[('Adj Close', instrument)]
+        low_min = self.data[("Adj Close", instrument)].rolling(window=k_window).min()
+        high_max = self.data[("Adj Close", instrument)].rolling(window=k_window).max()
+        current_close = self.data[("Adj Close", instrument)]
 
-        self.data[('%K', instrument)] = 100 * (current_close - low_min) / (high_max - low_min)
+        self.data[("%K", instrument)] = (
+            100 * (current_close - low_min) / (high_max - low_min)
+        )
 
         # Calculate %D as the moving average of %K
-        self.data[('%D', instrument)] = self.data[('%K', instrument)].rolling(window=d_window).mean()
+        self.data[("%D", instrument)] = (
+            self.data[("%K", instrument)].rolling(window=d_window).mean()
+        )
 
         # Handle any NaN values that may have been created
-        self.data[('%K', instrument)].fillna(method='bfill', inplace=True)
-        self.data[('%D', instrument)].fillna(method='bfill', inplace=True)
+        self.data[("%K", instrument)].fillna(method="bfill", inplace=True)
+        self.data[("%D", instrument)].fillna(method="bfill", inplace=True)
 
     def calculate_slow_stochastic_oscillator(self, d_window=3, slow_k_window=3):
         """
@@ -235,15 +267,14 @@ class BaseModel:
         Slow %D = 3-day SMA of Slow %K
         """
         # Calculate Slow %K, which is the moving average of %K
-        self.data['Slow %K'] = self.data['%K'].rolling(window=slow_k_window).mean()
+        self.data["Slow %K"] = self.data["%K"].rolling(window=slow_k_window).mean()
 
         # Calculate Slow %D, which is the moving average of Slow %K
-        self.data['Slow %D'] = self.data['Slow %K'].rolling(window=d_window).mean()
+        self.data["Slow %D"] = self.data["Slow %K"].rolling(window=d_window).mean()
 
         # Handle any NaN values
-        self.data['Slow %K'].bfill(inplace=True)
-        self.data['Slow %D'].bfill(inplace=True)
-
+        self.data["Slow %K"].bfill(inplace=True)
+        self.data["Slow %D"].bfill(inplace=True)
 
     # def detect_fourier_signals(self):
     #     # Add in fourier transform
@@ -262,34 +293,51 @@ class BaseModel:
     #     print("FourierSignalSell: ", self.data['FourierSignalSell'])
     #     print("FourierSignalBuy: ", self.data['FourierSignalBuy'])
 
-
     def detect_fourier_signals(self):
-        instruments = self.data.columns.get_level_values(1).unique()  # Assuming MultiIndex with instruments as the second level
+        instruments = self.data.columns.get_level_values(
+            1
+        ).unique()  # Assuming MultiIndex with instruments as the second level
 
         # Initialize Fourier signal columns for each instrument
         for instrument in instruments:
-            self.data[('FourierSignalSell', instrument)] = False
-            self.data[('FourierSignalBuy', instrument)] = False
+            self.data[("FourierSignalSell", instrument)] = False
+            self.data[("FourierSignalBuy", instrument)] = False
 
         # Process each instrument
         for instrument in instruments:
             print(f"Processing Fourier signals for {instrument}")
             print("checkcheckcheck: ", self.fft_features)
             # Get dominant periods, filter, and sort
-            dominant_periods = sorted(set((self.fft_features.loc[:10, 'DaysPerCycle'].values / 2).astype(int)), reverse=True)
-            dominant_periods = [p for p in dominant_periods if p < 30]  # Filter out long periods
+            dominant_periods = sorted(
+                set(
+                    (self.fft_features.loc[:10, "DaysPerCycle"].values / 2).astype(int)
+                ),
+                reverse=True,
+            )
+            dominant_periods = [
+                p for p in dominant_periods if p < 30
+            ]  # Filter out long periods
             dominant_periods = dominant_periods[:5]  # Take top 5
             print("Dominant Period Lengths for ", instrument, ": ", dominant_periods)
             print("!!!!!!!!: ", self.data.columns.get_level_values(1).unique())
             print("check12345: ", self.data.head())
-            print("check999: ", self.data[('FourierSignalSell', instrument)])
+            print("check999: ", self.data[("FourierSignalSell", instrument)])
             # Mark the Fourier signals based on the dominant periods
-            self.data[('FourierSignalSell', instrument)] = self.data[('DaysSinceTrough', instrument)].isin(dominant_periods)
-            self.data[('FourierSignalBuy', instrument)] = self.data[('DaysSincePeak', instrument)].isin(dominant_periods)
+            self.data[("FourierSignalSell", instrument)] = self.data[
+                ("DaysSinceTrough", instrument)
+            ].isin(dominant_periods)
+            self.data[("FourierSignalBuy", instrument)] = self.data[
+                ("DaysSincePeak", instrument)
+            ].isin(dominant_periods)
 
-            print(f"FourierSignalSell for {instrument}: ", self.data[('FourierSignalSell', instrument)].sum())
-            print(f"FourierSignalBuy for {instrument}: ", self.data[('FourierSignalBuy', instrument)].sum())
-
+            print(
+                f"FourierSignalSell for {instrument}: ",
+                self.data[("FourierSignalSell", instrument)].sum(),
+            )
+            print(
+                f"FourierSignalBuy for {instrument}: ",
+                self.data[("FourierSignalBuy", instrument)].sum(),
+            )
 
     # def detect_rolling_peaks_and_troughs(self, window_size=5):
     #     # Initialize columns to store the results
@@ -323,11 +371,14 @@ class BaseModel:
     def detect_rolling_peaks_and_troughs(self, window_size=5):
         # Iterate through each instrument
         for instrument in self.data.columns.get_level_values(1).unique():
-            close_key = ('Close', instrument)  # Adjust this if your 'Close' data is stored differently
+            close_key = (
+                "Close",
+                instrument,
+            )  # Adjust this if your 'Close' data is stored differently
 
             # Initialize columns to store results for each instrument
-            self.data[('isLocalPeak', instrument)] = False
-            self.data[('isLocalTrough', instrument)] = False
+            self.data[("isLocalPeak", instrument)] = False
+            self.data[("isLocalTrough", instrument)] = False
 
             # Retrieve close data for the instrument
             close_series = self.data[close_key]
@@ -339,28 +390,36 @@ class BaseModel:
 
                 # Find peaks
                 peaks, _ = find_peaks(window_data)
-                peaks_global_indices = [close_series.index[start_idx + p] for p in peaks]
-                self.data.loc[peaks_global_indices, ('isLocalPeak', instrument)] = True
+                peaks_global_indices = [
+                    close_series.index[start_idx + p] for p in peaks
+                ]
+                self.data.loc[peaks_global_indices, ("isLocalPeak", instrument)] = True
 
                 # Find troughs by inverting the data
                 troughs, _ = find_peaks(-window_data)
-                troughs_global_indices = [close_series.index[start_idx + t] for t in troughs]
-                self.data.loc[troughs_global_indices, ('isLocalTrough', instrument)] = True
+                troughs_global_indices = [
+                    close_series.index[start_idx + t] for t in troughs
+                ]
+                self.data.loc[
+                    troughs_global_indices, ("isLocalTrough", instrument)
+                ] = True
 
             # Assign labels based on peaks and troughs
-            self.data[('Label', instrument)] = 'Hold'  # Default label
-            self.data.loc[self.data[('isLocalPeak', instrument)], ('Label', instrument)] = 'Sell'
-            self.data.loc[self.data[('isLocalTrough', instrument)], ('Label', instrument)] = 'Buy'
+            self.data[("Label", instrument)] = "Hold"  # Default label
+            self.data.loc[
+                self.data[("isLocalPeak", instrument)], ("Label", instrument)
+            ] = "Sell"
+            self.data.loc[
+                self.data[("isLocalTrough", instrument)], ("Label", instrument)
+            ] = "Buy"
 
         # Optional: Handle data cleaning if required
-        self.data.fillna(method='ffill', inplace=True)
-
-    
+        self.data.fillna(method="ffill", inplace=True)
 
     # Calculating Moving Averages and RSI manually
     def calculate_rsi(self, instrument, window=14):
-        """ Calculate the Relative Strength Index (RSI) for a given dataset and window """
-        delta = self.data[('Close', instrument)].diff()
+        """Calculate the Relative Strength Index (RSI) for a given dataset and window"""
+        delta = self.data[("Close", instrument)].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
 
@@ -369,39 +428,77 @@ class BaseModel:
         return rsi
 
     def calculate_moving_averages_and_rsi(self):
-        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
+        instruments = [
+            "AUDUSD=X",
+            "BZ=F",
+            "CL=F",
+            "GC=F",
+            "NG=F",
+            "NZDUSD=X",
+            "SI=F",
+            "USDAUD=X",
+            "USDBRL=X",
+            "USDCAD=X",
+            "USDNOK=X",
+            "USDZAR=X",
+        ]
         # Initialize Fourier signal columns for each instrument
         for instrument in instruments:
             print("11111check instrument: ", instrument)
             short_window = 5
             long_window = 20
             rsi_period = 14
-            self.data[('Short_Moving_Avg', instrument)] = self.data[('Close', instrument)].rolling(
-                window=short_window).mean()
-            self.data[('Long_Moving_Avg', instrument)] = self.data[('Close', instrument)].rolling(
-                window=long_window).mean()
-            self.data[('RSI', instrument)] = self.calculate_rsi(instrument, window=rsi_period)
+            self.data[("Short_Moving_Avg", instrument)] = (
+                self.data[("Close", instrument)].rolling(window=short_window).mean()
+            )
+            self.data[("Long_Moving_Avg", instrument)] = (
+                self.data[("Close", instrument)].rolling(window=long_window).mean()
+            )
+            self.data[("RSI", instrument)] = self.calculate_rsi(
+                instrument, window=rsi_period
+            )
 
-        print("check_andre: ", self.data[('Short_Moving_Avg', 'AUDUSD=X')])
+        print("check_andre: ", self.data[("Short_Moving_Avg", "AUDUSD=X")])
 
     # Bollinger Bands
     def calculate_bollinger_bands(self):
-        self.data['BBand_Upper'], self.data['BBand_Middle'], self.data['BBand_Lower'] = talib.BBANDS(self.data['Close'], timeperiod=20)
+        (
+            self.data["BBand_Upper"],
+            self.data["BBand_Middle"],
+            self.data["BBand_Lower"],
+        ) = talib.BBANDS(self.data["Close"], timeperiod=20)
 
     # Bollinger Bandwidth
     def calculate_bollinger_bandwidth(self):
-        self.data['Bollinger_Bandwidth'] = (self.data['BBand_Upper'] - self.data['BBand_Lower']) / self.data['BBand_Middle']
+        self.data["Bollinger_Bandwidth"] = (
+            self.data["BBand_Upper"] - self.data["BBand_Lower"]
+        ) / self.data["BBand_Middle"]
 
     # Bollinger %B
     def calculate_bollinger_percent_b(self):
-        self.data['Bollinger_PercentB'] = (self.data['Close'] - self.data['BBand_Lower']) / (self.data['BBand_Upper'] - self.data['BBand_Lower'])
+        self.data["Bollinger_PercentB"] = (
+            self.data["Close"] - self.data["BBand_Lower"]
+        ) / (self.data["BBand_Upper"] - self.data["BBand_Lower"])
 
     def construct_kalman_filter(self):
         # instruments = self.data.columns.get_level_values(1).unique()
-        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
-        
+        instruments = [
+            "AUDUSD=X",
+            "BZ=F",
+            "CL=F",
+            "GC=F",
+            "NG=F",
+            "NZDUSD=X",
+            "SI=F",
+            "USDAUD=X",
+            "USDBRL=X",
+            "USDCAD=X",
+            "USDNOK=X",
+            "USDZAR=X",
+        ]
+
         for instrument in instruments:
-            close_prices = self.data[('Close', instrument)]
+            close_prices = self.data[("Close", instrument)]
             # Construct a Kalman Filter
             kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
 
@@ -409,13 +506,12 @@ class BaseModel:
             state_means, _ = kf.filter(close_prices.values)
 
             # Convert state means to a Pandas Series for easy plotting
-            kalman_estimates = pd.Series(
-                state_means.flatten(), index=self.data.index)
+            kalman_estimates = pd.Series(state_means.flatten(), index=self.data.index)
 
             # Combine the original close prices and Kalman Filter estimates
-            kalman_estimates = pd.DataFrame({
-                ('KalmanFilterEst', instrument): kalman_estimates
-            })
+            kalman_estimates = pd.DataFrame(
+                {("KalmanFilterEst", instrument): kalman_estimates}
+            )
             self.data = self.data.join(kalman_estimates)
 
             # print('KalmanFilterEst: ', self.data['KalmanFilterEst'])  # Display the first few rows of the dataframe
@@ -433,20 +529,21 @@ class BaseModel:
 
         for i in range(0, len(self.data) - window_size + 1, step_size):
             # Extract the window
-            window = self.data['Close'].iloc[i:i + window_size]
+            window = self.data["Close"].iloc[i : i + window_size]
 
             # Calculate the Hurst exponent
-            H, _, _ = compute_Hc(window, kind='price', simplified=True)
+            H, _, _ = compute_Hc(window, kind="price", simplified=True)
 
             # Store the result along with the starting date of the window
             hurst_exponents.append(
-                {'Date': self.data['Date'].iloc[i], 'HurstExponent': H})
+                {"Date": self.data["Date"].iloc[i], "HurstExponent": H}
+            )
 
         # Convert the results list into a DataFrame
         hurst_exponents = pd.DataFrame(hurst_exponents)
 
         # Combine the original DataFrame and Hurst exponent estimates
-        self.data = self.data.merge(hurst_exponents, on='Date', how='left')
+        self.data = self.data.merge(hurst_exponents, on="Date", how="left")
 
     # def calculate_days_since_peaks_and_troughs(self):
     #     self.data['DaysSincePeak'] = 0
@@ -497,10 +594,10 @@ class BaseModel:
 
         # Prepare columns for each instrument
         for instrument in instruments:
-            self.data[('DaysSincePeak', instrument)] = 0
-            self.data[('DaysSinceTrough', instrument)] = 0
-            self.data[('PriceChangeSincePeak', instrument)] = 0
-            self.data[('PriceChangeSinceTrough', instrument)] = 0
+            self.data[("DaysSincePeak", instrument)] = 0
+            self.data[("DaysSinceTrough", instrument)] = 0
+            self.data[("PriceChangeSincePeak", instrument)] = 0
+            self.data[("PriceChangeSinceTrough", instrument)] = 0
 
         # Iterate over each instrument
         for instrument in instruments:
@@ -512,29 +609,53 @@ class BaseModel:
             # Iterate over rows
             for today_date, row in self.data.iterrows():
                 # print("TODAY_DATE:", today_date)
-                current_price = row[('Close', instrument)]
+                current_price = row[("Close", instrument)]
 
                 # Check for buy/sell signals and update checkpoints
-                if row[('Label', instrument)] == 'Buy':
+                if row[("Label", instrument)] == "Buy":
                     checkpoint_date_bottom = today_date
                     checkpoint_price_bottom = current_price
-                if row[('Label', instrument)] == 'Sell':
+                if row[("Label", instrument)] == "Sell":
                     checkpoint_date_top = today_date
                     checkpoint_price_top = current_price
 
                 # Calculate days since events
-                days_since_bottom = (today_date - checkpoint_date_bottom).days if checkpoint_date_bottom else 0
-                days_since_peak = (today_date - checkpoint_date_top).days if checkpoint_date_top else 0
+                days_since_bottom = (
+                    (today_date - checkpoint_date_bottom).days
+                    if checkpoint_date_bottom
+                    else 0
+                )
+                days_since_peak = (
+                    (today_date - checkpoint_date_top).days
+                    if checkpoint_date_top
+                    else 0
+                )
 
                 # Calculate price changes since events
-                price_change_since_bottom = current_price - checkpoint_price_bottom if checkpoint_price_bottom is not None else 0
-                price_change_since_peak = current_price - checkpoint_price_top if checkpoint_price_top is not None else 0
+                price_change_since_bottom = (
+                    current_price - checkpoint_price_bottom
+                    if checkpoint_price_bottom is not None
+                    else 0
+                )
+                price_change_since_peak = (
+                    current_price - checkpoint_price_top
+                    if checkpoint_price_top is not None
+                    else 0
+                )
 
                 # Update DataFrame
-                self.data.at[today_date, ('DaysSincePeak', instrument)] = days_since_peak
-                self.data.at[today_date, ('DaysSinceTrough', instrument)] = days_since_bottom
-                self.data.at[today_date, ('PriceChangeSincePeak', instrument)] = price_change_since_peak
-                self.data.at[today_date, ('PriceChangeSinceTrough', instrument)] = price_change_since_bottom
+                self.data.at[
+                    today_date, ("DaysSincePeak", instrument)
+                ] = days_since_peak
+                self.data.at[
+                    today_date, ("DaysSinceTrough", instrument)
+                ] = days_since_bottom
+                self.data.at[
+                    today_date, ("PriceChangeSincePeak", instrument)
+                ] = price_change_since_peak
+                self.data.at[
+                    today_date, ("PriceChangeSinceTrough", instrument)
+                ] = price_change_since_bottom
 
     def compute_persistence_norms(self, persistence_diagram):
         """
@@ -559,7 +680,7 @@ class BaseModel:
         :param d: Maximum Betti dimension.
         :param w: Window size for rolling persistence diagram.
         """
-        instruments = ['CL=F', 'GC=F', 'SI=F']  # Adjust based on your data
+        instruments = ["CL=F", "GC=F", "SI=F"]  # Adjust based on your data
 
         betti_curve_dfs = []
         norm_dfs = []
@@ -568,14 +689,16 @@ class BaseModel:
             print(f"Calculating Betti curves and persistence norms for {instrument}")
 
             # Extract data for the instrument
-            data_series = self.data[('Adj Close', instrument)].dropna()
+            data_series = self.data[("Adj Close", instrument)].dropna()
 
             # Create sliding windows
             sliding_window = SlidingWindow(size=w, stride=1)
             windows = sliding_window.fit_transform(data_series.values.reshape(-1, 1))
 
             # Compute Vietoris-Rips persistence diagrams
-            VR_persistence = VietorisRipsPersistence(homology_dimensions=list(range(d+1)))
+            VR_persistence = VietorisRipsPersistence(
+                homology_dimensions=list(range(d + 1))
+            )
             diagrams = VR_persistence.fit_transform(windows)
 
             # Compute Betti curves
@@ -584,8 +707,11 @@ class BaseModel:
 
             # Compute and store Betti curves
             for dim in range(d + 1):
-                col_name = f'BettiCurve_{dim}_{instrument}'
-                betti_curve_series = pd.Series(betti_curves_values[:, dim, :].mean(axis=1), index=data_series.index[w-1:])
+                col_name = f"BettiCurve_{dim}_{instrument}"
+                betti_curve_series = pd.Series(
+                    betti_curves_values[:, dim, :].mean(axis=1),
+                    index=data_series.index[w - 1 :],
+                )
                 betti_curve_df = pd.DataFrame(betti_curve_series, columns=[col_name])
                 betti_curve_dfs.append(betti_curve_df)
 
@@ -596,28 +722,34 @@ class BaseModel:
                 L1, L2 = self.compute_persistence_norms(diagram)
                 L1_norms.append(L1)
                 L2_norms.append(L2)
-            
-            norm_df = pd.DataFrame({
-                f'L1_Persistence_{instrument}': L1_norms,
-                f'L2_Persistence_{instrument}': L2_norms
-            }, index=data_series.index[w-1:])
+
+            norm_df = pd.DataFrame(
+                {
+                    f"L1_Persistence_{instrument}": L1_norms,
+                    f"L2_Persistence_{instrument}": L2_norms,
+                },
+                index=data_series.index[w - 1 :],
+            )
             norm_dfs.append(norm_df)
 
         # Concatenate all Betti curve DataFrames and norm DataFrames
         betti_curve_combined_df = pd.concat(betti_curve_dfs + norm_dfs, axis=1)
 
         # Flatten the MultiIndex in self.data to a single level
-        self.data.columns = ['_'.join(col).strip() for col in self.data.columns.values]
+        self.data.columns = ["_".join(col).strip() for col in self.data.columns.values]
 
         # Join the Betti curves and norm DataFrame with the main data
-        self.data = self.data.join(betti_curve_combined_df, how='left')
+        self.data = self.data.join(betti_curve_combined_df, how="left")
 
         # Restore the original MultiIndex structure if needed
-        self.data.columns = pd.MultiIndex.from_tuples([(col.split('_', 1)[0], col.split('_', 1)[1] if '_' in col else '') for col in self.data.columns])
+        self.data.columns = pd.MultiIndex.from_tuples(
+            [
+                (col.split("_", 1)[0], col.split("_", 1)[1] if "_" in col else "")
+                for col in self.data.columns
+            ]
+        )
 
         print("check betti data: ", self.data)
-
-
 
     # def calculate_betti_curves(self, K=10, d=1, w=5):
     #     """
@@ -668,19 +800,34 @@ class BaseModel:
     #     # Restore the original MultiIndex structure if needed
     #     self.data.columns = pd.MultiIndex.from_tuples([(col.split('_', 1)[0], col.split('_', 1)[1] if '_' in col else '') for col in self.data.columns])
 
-
     #     print("check betti data: ", self.data)
 
-
     def calculate_first_second_order_derivatives(self):
-        instruments = ['AUDUSD=X', 'BZ=F', 'CL=F', 'GC=F', 'NG=F', 'NZDUSD=X', 'SI=F', 'USDAUD=X', 'USDBRL=X', 'USDCAD=X', 'USDNOK=X', 'USDZAR=X']
+        instruments = [
+            "AUDUSD=X",
+            "BZ=F",
+            "CL=F",
+            "GC=F",
+            "NG=F",
+            "NZDUSD=X",
+            "SI=F",
+            "USDAUD=X",
+            "USDBRL=X",
+            "USDCAD=X",
+            "USDNOK=X",
+            "USDZAR=X",
+        ]
         print("check instruments:", instruments)
-        print("self.data check135: ", self.data[('Short_Moving_Avg', 'AUDUSD=X')])
+        print("self.data check135: ", self.data[("Short_Moving_Avg", "AUDUSD=X")])
         # Calculate first and second order derivatives for selected features
-        for feature in ['KalmanFilterEst', 'Short_Moving_Avg', 'Long_Moving_Avg']:
+        for feature in ["KalmanFilterEst", "Short_Moving_Avg", "Long_Moving_Avg"]:
             for instrument in instruments:
-                self.data[(f'{feature}_1st_Deriv', instrument)] = self.data[(feature, instrument)].diff() * 100
-                self.data[(f'{feature}_2nd_Deriv', instrument)] = self.data[(f'{feature}_1st_Deriv', instrument)].diff() * 100
+                self.data[(f"{feature}_1st_Deriv", instrument)] = (
+                    self.data[(feature, instrument)].diff() * 100
+                )
+                self.data[(f"{feature}_2nd_Deriv", instrument)] = (
+                    self.data[(f"{feature}_1st_Deriv", instrument)].diff() * 100
+                )
 
         # self.data[f'KalmanFilterEst_1st_Deriv'] = self.data['KalmanFilterEst'].diff() * 100
         # self.data[f'KalmanFilterEst_2nd_Deriv'] = self.data[f'KalmanFilterEst_1st_Deriv'].diff() * 100
@@ -688,49 +835,65 @@ class BaseModel:
         # self.data[f'Short_Moving_Avg_2nd_Deriv'] = self.data[f'Short_Moving_Avg_1st_Deriv'].diff() * 100
         # self.data[f'Long_Moving_Avg_1st_Deriv'] = self.data['Long_Moving_Avg'].diff() * 100
         # self.data[f'Long_Moving_Avg_2nd_Deriv'] = self.data[f'Long_Moving_Avg_1st_Deriv'].diff() * 100
-        
+
         # Fill NaN values that were generated by diff()
         self.data.bfill(inplace=True)
 
     def integrate_tbill_data(self):
-        file_path_JPYTBill = 'data/JPY_1Y_TBill_GJTB12MO.csv'
-        file_path_USTBill = 'data/USD_1Y_TBill_H15T1Y.csv'
-        
+        file_path_JPYTBill = "data/JPY_1Y_TBill_GJTB12MO.csv"
+        file_path_USTBill = "data/USD_1Y_TBill_H15T1Y.csv"
+
         TBill_data_JP = pd.read_csv(file_path_JPYTBill)
         TBill_data_US = pd.read_csv(file_path_USTBill)
-        
+
         # get TBill data
-        TBill_data = TBill_data_US.merge(TBill_data_JP, on = 'Date')
-        TBill_data['Interest_Rate_Difference'] = TBill_data['PX_LAST_y'] - TBill_data['PX_LAST_x']
-        TBill_data['Interest_Rate_Difference_Change'] = TBill_data['Interest_Rate_Difference'].diff() * 10
-        TBill_data = TBill_data[['Date', 'Interest_Rate_Difference', 'Interest_Rate_Difference_Change']]
-        TBill_data['Date'] = pd.to_datetime(TBill_data['Date'], dayfirst= True)
+        TBill_data = TBill_data_US.merge(TBill_data_JP, on="Date")
+        TBill_data["Interest_Rate_Difference"] = (
+            TBill_data["PX_LAST_y"] - TBill_data["PX_LAST_x"]
+        )
+        TBill_data["Interest_Rate_Difference_Change"] = (
+            TBill_data["Interest_Rate_Difference"].diff() * 10
+        )
+        TBill_data = TBill_data[
+            ["Date", "Interest_Rate_Difference", "Interest_Rate_Difference_Change"]
+        ]
+        TBill_data["Date"] = pd.to_datetime(TBill_data["Date"], dayfirst=True)
         print("check TBill_data: ", TBill_data)
-        self.data = self.data.merge(TBill_data, on = 'Date')
+        self.data = self.data.merge(TBill_data, on="Date")
 
     def integrate_currency_account_data(self):
-        file_path_CurrencyAccount_JP = 'data/Japan_Currency_Account.xlsx'
-        file_path_CurrencyAccount_US = 'data/US_Currency_Account.xlsx'
+        file_path_CurrencyAccount_JP = "data/Japan_Currency_Account.xlsx"
+        file_path_CurrencyAccount_US = "data/US_Currency_Account.xlsx"
 
-        CurrencyAccount_JP = pd.read_excel(file_path_CurrencyAccount_JP, parse_dates= True)
-        CurrencyAccount_US = pd.read_excel(file_path_CurrencyAccount_US, parse_dates= True)
+        CurrencyAccount_JP = pd.read_excel(
+            file_path_CurrencyAccount_JP, parse_dates=True
+        )
+        CurrencyAccount_US = pd.read_excel(
+            file_path_CurrencyAccount_US, parse_dates=True
+        )
 
         # get Currency Account data
-        CurrencyAccount_data = CurrencyAccount_US.merge(CurrencyAccount_JP, on ='Date')
-        CurrencyAccount_Date = CurrencyAccount_data['Date'].values
-        CurrencyAccount_data = CurrencyAccount_data.set_index('Date')
-        CurrencyAccount_data = CurrencyAccount_data[['PX_LAST_x', 'PX_LAST_y']]
+        CurrencyAccount_data = CurrencyAccount_US.merge(CurrencyAccount_JP, on="Date")
+        CurrencyAccount_Date = CurrencyAccount_data["Date"].values
+        CurrencyAccount_data = CurrencyAccount_data.set_index("Date")
+        CurrencyAccount_data = CurrencyAccount_data[["PX_LAST_x", "PX_LAST_y"]]
         CurrencyAccount_data_scaled = self.scaler.fit_transform(CurrencyAccount_data)
-        CurrencyAccount_data = pd.DataFrame(CurrencyAccount_data_scaled, index= CurrencyAccount_Date)
-        CurrencyAccount_data['Currency_Account_difference'] = CurrencyAccount_data.iloc[:,1] - CurrencyAccount_data.iloc[:,0]
-        CurrencyAccount_data = CurrencyAccount_data[['Currency_Account_difference']]
+        CurrencyAccount_data = pd.DataFrame(
+            CurrencyAccount_data_scaled, index=CurrencyAccount_Date
+        )
+        CurrencyAccount_data["Currency_Account_difference"] = (
+            CurrencyAccount_data.iloc[:, 1] - CurrencyAccount_data.iloc[:, 0]
+        )
+        CurrencyAccount_data = CurrencyAccount_data[["Currency_Account_difference"]]
         # Linear Interpolate the data
-        CurrencyAccount_data = CurrencyAccount_data.resample('D').interpolate()
-        CurrencyAccount_data['Currency_Account_difference'] = CurrencyAccount_data['Currency_Account_difference'].interpolate()
+        CurrencyAccount_data = CurrencyAccount_data.resample("D").interpolate()
+        CurrencyAccount_data["Currency_Account_difference"] = CurrencyAccount_data[
+            "Currency_Account_difference"
+        ].interpolate()
         CurrencyAccount_data = CurrencyAccount_data.reset_index()
-        CurrencyAccount_data.columns = ['Date', 'Currency_Account_difference']
+        CurrencyAccount_data.columns = ["Date", "Currency_Account_difference"]
 
-        self.data = self.data.merge(CurrencyAccount_data, on = 'Date')
+        self.data = self.data.merge(CurrencyAccount_data, on="Date")
 
     def preprocess_data(self):
         self.data.dropna(inplace=True)
@@ -743,7 +906,6 @@ class BaseModel:
     #     # train_data = self.data[(self.data['Date'] >= self.train_start) & (self.data['Date'] < self.train_end)]
     #     # test_data = self.data[(self.data['Date'] >= self.test_start) & (self.data['Date'] < self.test_end)]
 
-
     #     # Sort the data by date to ensure correct time sequence
     #     self.data.sort_values('Date', inplace=True)
 
@@ -755,7 +917,7 @@ class BaseModel:
     #     # # Filter the data for training and testing periods
     #     # self.train_data = self.data[(self.data['Date'] >= self.train_start) & (self.data['Date'] < self.train_end)]
     #     # self.test_data  = self.data[(self.data['Date'] >= self.test_start) & (self.data['Date'] < self.test_end)]
-        
+
     #     # Filter the data for training and testing periods and create copies
     #     self.train_data = self.data[(self.data['Date'] >= self.train_start) & (self.data['Date'] < self.train_end)].copy()
     #     self.test_data = self.data[(self.data['Date'] >= self.test_start) & (self.data['Date'] < self.test_end)].copy()
@@ -803,7 +965,7 @@ class BaseModel:
     #     self.X_train = self.train_data[
     #         feature_set
     #     ]
-        
+
     #     # ].iloc[:self.split_idx]
     #     self.X_test = self.test_data[
     #         feature_set
@@ -823,42 +985,44 @@ class BaseModel:
     def train_test_split_time_series(self):
         # Ensure 'Date' is the DataFrame index
         if not isinstance(self.data.index, pd.DatetimeIndex):
-            self.data['Date'] = pd.to_datetime(self.data.index)
-            self.data.set_index('Date', inplace=True)
+            self.data["Date"] = pd.to_datetime(self.data.index)
+            self.data.set_index("Date", inplace=True)
 
         # Sort the data by date to ensure correct time sequence
         self.data.sort_index(inplace=True)
 
         # Filter the data for training and testing periods
-        self.train_data = self.data.loc[self.train_start:self.train_end].copy()
-        self.test_data = self.data.loc[self.test_start:self.test_end].copy()
+        self.train_data = self.data.loc[self.train_start : self.train_end].copy()
+        self.test_data = self.data.loc[self.test_start : self.test_end].copy()
 
         # Calculate the age of each data point in days
         current_date = pd.to_datetime(self.train_end)
-        self.train_data['DataAge'] = (current_date - self.train_data.index).days
+        self.train_data["DataAge"] = (current_date - self.train_data.index).days
 
         # Apply exponential decay to calculate weights
         decay_rate = 0.05  # This is a parameter you can tune
-        self.train_data['Weight'] = np.exp(-decay_rate * self.train_data['DataAge'])
+        self.train_data["Weight"] = np.exp(-decay_rate * self.train_data["DataAge"])
 
         # Now sample from training data with these weights
         sample_size = min(len(self.train_data), 1500)
-        self.train_data = self.train_data.sample(n=sample_size, replace=False, weights=self.train_data['Weight'])
+        self.train_data = self.train_data.sample(
+            n=sample_size, replace=False, weights=self.train_data["Weight"]
+        )
         self.train_data.sort_index(inplace=True)
-        self.train_data.to_csv('outputs/inspect_training_set.csv')
-        self.test_data.to_csv('outputs/inspect_testing_set.csv')
+        self.train_data.to_csv("outputs/inspect_training_set.csv")
+        self.test_data.to_csv("outputs/inspect_testing_set.csv")
 
         feature_set = [
             # List your features here
             # 'Short_Moving_Avg_2nd_Deriv',
             # 'Long_Moving_Avg_2nd_Deriv',
             # 'RSI',
-            'DaysSincePeak',
-            'DaysSinceTrough',
-            'FourierSignalSell',
-            'FourierSignalBuy',
-            '%K',
-            '%D',
+            "DaysSincePeak",
+            "DaysSinceTrough",
+            "FourierSignalSell",
+            "FourierSignalBuy",
+            "%K",
+            "%D",
             # 'Slow %K',
             # 'Slow %D',
             # 'KalmanFilterEst_1st_Deriv',
@@ -869,15 +1033,14 @@ class BaseModel:
         # Extract the features for training and testing sets
         self.X_train = self.train_data[feature_set]
         self.X_test = self.test_data[feature_set]
-        self.y_train = self.train_data['Label']
-        self.y_test = self.test_data['Label']
-        self.data.fillna(method='ffill', inplace=True)
+        self.y_train = self.train_data["Label"]
+        self.y_test = self.test_data["Label"]
+        self.data.fillna(method="ffill", inplace=True)
 
         print("len X train: ", len(self.X_train))
         print("len X test: ", len(self.X_test))
         print("len y train: ", len(self.y_train))
         print("len y test: ", len(self.y_test))
-
 
     def retrieve_test_set(self):
         # return self.data[self.split_idx:]

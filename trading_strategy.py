@@ -1,7 +1,15 @@
-
 class TradingStrategy:
-
-    def __init__(self, model, data, start_cash=10000, trading_lot=7500, stop_loss_threshold=0.05, leverage_factor=4, margin_call_threshold=0.5, annual_interest_rate=0.03):
+    def __init__(
+        self,
+        model,
+        data,
+        start_cash=10000,
+        trading_lot=7500,
+        stop_loss_threshold=0.05,
+        leverage_factor=4,
+        margin_call_threshold=0.5,
+        annual_interest_rate=0.03,
+    ):
         self.model = model
         self.data = data
         self.cash = start_cash
@@ -22,28 +30,45 @@ class TradingStrategy:
 
         print("check predicted_categories: ", predicted_categories)
 
-        for index, (row, prediction) in enumerate(zip(self.data.iterrows(), predicted_categories)):
+        for index, (row, prediction) in enumerate(
+            zip(self.data.iterrows(), predicted_categories)
+        ):
             # print("row: ", row)
             print("prediction: ", prediction)
-            usd_brl_spot_rate = row[1]['Adj Close']['USDBRL=X']
+            usd_brl_spot_rate = row[1]["Adj Close"]["USDBRL=X"]
             print("usd_brl_spot_rate: ", usd_brl_spot_rate)
             current_date = row[0]
             print("current_date: ", current_date)
             # daily_change_percentage = row[1]['Daily_Change_Open_to_Close']
-            
+
             # if self.jpy_inventory > 0:
             #     self.daily_return_factors.append(1 + (daily_change_percentage * self.leverage_factor))
 
-            is_stop_loss_triggered = self._check_stop_loss(usd_brl_spot_rate, current_date)
+            is_stop_loss_triggered = self._check_stop_loss(
+                usd_brl_spot_rate, current_date
+            )
 
             if is_stop_loss_triggered:
                 continue
 
             # if prediction == 'Sell' and self.cash >= self.trading_lot:
-            if prediction == 'Sell' and self.cash >= self.trading_lot and ( self.buy_price is None or (self.buy_price is not None and ( usd_brl_spot_rate < self.buy_price * 0.99 or usd_brl_spot_rate > self.buy_price * 1.01) ) ):
+            if (
+                prediction == "Sell"
+                and self.cash >= self.trading_lot
+                and (
+                    self.buy_price is None
+                    or (
+                        self.buy_price is not None
+                        and (
+                            usd_brl_spot_rate < self.buy_price * 0.99
+                            or usd_brl_spot_rate > self.buy_price * 1.01
+                        )
+                    )
+                )
+            ):
                 self._buy_brl(usd_brl_spot_rate, current_date)
                 print("buying USD BRL at : ", usd_brl_spot_rate, current_date)
-            elif prediction == 'Buy' and self.brl_inventory > 0:
+            elif prediction == "Buy" and self.brl_inventory > 0:
                 self._sell_brl(usd_brl_spot_rate, current_date)
                 print("selling USD BRL at : ", usd_brl_spot_rate, current_date)
 
@@ -53,21 +78,38 @@ class TradingStrategy:
 
     def execute_trades_perfect_future_knowledge(self):
         for index, row in self.data.iterrows():
-            usd_jpy_spot_rate = row['Open']
-            current_date = row['Date']
-            daily_change_percentage = row['Daily_Change_Open_to_Close']
+            usd_jpy_spot_rate = row["Open"]
+            current_date = row["Date"]
+            daily_change_percentage = row["Daily_Change_Open_to_Close"]
 
             if self.jpy_inventory > 0:
-                self.daily_return_factors.append(1 + (daily_change_percentage * self.leverage_factor))
+                self.daily_return_factors.append(
+                    1 + (daily_change_percentage * self.leverage_factor)
+                )
 
-            is_stop_loss_triggered = self._check_stop_loss(usd_jpy_spot_rate, current_date)
+            is_stop_loss_triggered = self._check_stop_loss(
+                usd_jpy_spot_rate, current_date
+            )
 
             if is_stop_loss_triggered:
                 continue
 
-            if row['Label'] == 'Sell' and self.cash >= self.trading_lot and ( self.buy_price is None or (self.buy_price is not None and ( usd_jpy_spot_rate < self.buy_price * 0.99 or usd_jpy_spot_rate > self.buy_price * 1.01) ) ):
+            if (
+                row["Label"] == "Sell"
+                and self.cash >= self.trading_lot
+                and (
+                    self.buy_price is None
+                    or (
+                        self.buy_price is not None
+                        and (
+                            usd_jpy_spot_rate < self.buy_price * 0.99
+                            or usd_jpy_spot_rate > self.buy_price * 1.01
+                        )
+                    )
+                )
+            ):
                 self._buy_jpy(usd_jpy_spot_rate, current_date)
-            elif row['Label'] == 'Buy' and self.jpy_inventory > 0:
+            elif row["Label"] == "Buy" and self.jpy_inventory > 0:
                 self._sell_jpy(usd_jpy_spot_rate, current_date)
 
             if self._check_margin_call(usd_jpy_spot_rate):
@@ -88,8 +130,14 @@ class TradingStrategy:
         # jpy_convert_to_usd = ( self.jpy_inventory / rate ) / self.leverage_factor
         # self.cash += jpy_convert_to_usd
         self.cash = self._compute_mtm(rate)
-        sell_reason = "Model predicted sell" if not forced else "Margin call / stop-loss triggered"
-        self.trade_log.append(f"111Sell {self.brl_inventory} BRL at {rate} on {date} ({sell_reason})")
+        sell_reason = (
+            "Model predicted sell"
+            if not forced
+            else "Margin call / stop-loss triggered"
+        )
+        self.trade_log.append(
+            f"111Sell {self.brl_inventory} BRL at {rate} on {date} ({sell_reason})"
+        )
 
         self._apply_interest_charge(rate)
 
@@ -111,7 +159,7 @@ class TradingStrategy:
         current_value = self.brl_inventory / usd_brl_spot_rate
         print("current_value: ", current_value)
         # Calculate the invested amount (in USD) for the JPY inventory
-        invested_amount = (self.brl_inventory / self.buy_price)
+        invested_amount = self.brl_inventory / self.buy_price
         print("invested_amount: ", invested_amount)
         pnl = current_value - invested_amount
         principal = self.trading_lot
@@ -141,26 +189,32 @@ class TradingStrategy:
 
     def _apply_interest_charge(self, rate):
         days_held = len(self.daily_return_factors)
-        daily_interest_rate = (1 + self.annual_interest_rate) ** (1/365) - 1
+        daily_interest_rate = (1 + self.annual_interest_rate) ** (1 / 365) - 1
         # interest_charge = ( self.jpy_inventory / rate ) * daily_interest_rate * days_held
-        borrowed_quantum = self.brl_inventory - ( self.brl_inventory / self.leverage_factor )
-        interest_charge = ( borrowed_quantum / rate ) * daily_interest_rate * days_held
-        self.interest_costs.append( interest_charge )
+        borrowed_quantum = self.brl_inventory - (
+            self.brl_inventory / self.leverage_factor
+        )
+        interest_charge = (borrowed_quantum / rate) * daily_interest_rate * days_held
+        self.interest_costs.append(interest_charge)
 
     def evaluate_performance(self):
-        final_usd_brl_spot_rate = self.data.iloc[-1]['Adj Close']['USDBRL=X']
+        final_usd_brl_spot_rate = self.data.iloc[-1]["Adj Close"]["USDBRL=X"]
         # final_portfolio_value = self.cash + (self.jpy_inventory / final_usd_jpy_spot_rate)
         final_portfolio_value = self._compute_mtm(final_usd_brl_spot_rate)
         print("final_portfolio_value000: ", final_portfolio_value)
         print("shares: ", self.brl_inventory)
-        pnl_per_trade = (final_portfolio_value - self.starting_cash) / len(self.trade_log) if self.trade_log else 0
+        pnl_per_trade = (
+            (final_portfolio_value - self.starting_cash) / len(self.trade_log)
+            if self.trade_log
+            else 0
+        )
         print("111 pnl_per_trade: ", pnl_per_trade)
         print("check interest_costs: ", self.interest_costs)
         return {
-            'Final Portfolio Value': final_portfolio_value,
-            'Number of Trades': len(self.trade_log),
-            'Profit/Loss per Trade': pnl_per_trade,
-            'Trade Log': self.trade_log,
-            'Interest Costs': self.interest_costs,
-            'Transaction Costs': len(self.trade_log),
+            "Final Portfolio Value": final_portfolio_value,
+            "Number of Trades": len(self.trade_log),
+            "Profit/Loss per Trade": pnl_per_trade,
+            "Trade Log": self.trade_log,
+            "Interest Costs": self.interest_costs,
+            "Transaction Costs": len(self.trade_log),
         }
