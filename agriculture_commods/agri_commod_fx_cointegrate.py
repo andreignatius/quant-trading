@@ -18,7 +18,7 @@ agri_commod_df.columns = ['Date','Corn', 'Soybeans', 'Wheat']  # Rename columns
 
 # Read CSV file
 fx_df = pd.read_csv('fx_rates.csv')
-print(fx_df)
+# print(fx_df)
 
 # Merge on Date
 agri_fx_merged_df= pd.merge(agri_commod_df, fx_df, on='Date')
