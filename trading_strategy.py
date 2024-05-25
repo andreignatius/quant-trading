@@ -17,39 +17,70 @@ class TradingStrategy:
         self.daily_return_factors = []
         self.interest_costs = []
 
+    # def execute_trades(self):
+    #     predicted_categories = self.model.predict()
+
+    #     print("check predicted_categories: ", predicted_categories)
+
+    #     for index, (row, prediction) in enumerate(zip(self.data.iterrows(), predicted_categories)):
+    #         # print("row: ", row)
+    #         print("prediction: ", prediction)
+    #         usd_brl_spot_rate = row[1]['Adj Close']['USDBRL=X']
+    #         print("usd_brl_spot_rate: ", usd_brl_spot_rate)
+    #         current_date = row[0]
+    #         print("current_date: ", current_date)
+    #         # daily_change_percentage = row[1]['Daily_Change_Open_to_Close']
+            
+    #         # if self.jpy_inventory > 0:
+    #         #     self.daily_return_factors.append(1 + (daily_change_percentage * self.leverage_factor))
+
+    #         is_stop_loss_triggered = self._check_stop_loss(usd_brl_spot_rate, current_date)
+
+    #         if is_stop_loss_triggered:
+    #             continue
+
+    #         # if prediction == 'Sell' and self.cash >= self.trading_lot:
+    #         if prediction == 'Sell' and self.cash >= self.trading_lot and ( self.buy_price is None or (self.buy_price is not None and ( usd_brl_spot_rate < self.buy_price * 0.99 or usd_brl_spot_rate > self.buy_price * 1.01) ) ):
+    #             self._buy_brl(usd_brl_spot_rate, current_date)
+    #             print("buying USD BRL at : ", usd_brl_spot_rate, current_date)
+    #         elif prediction == 'Buy' and self.brl_inventory > 0:
+    #             self._sell_brl(usd_brl_spot_rate, current_date)
+    #             print("selling USD BRL at : ", usd_brl_spot_rate, current_date)
+
+    #         # if self._check_margin_call(usd_jpy_spot_rate):
+    #         #     print("MARGIN CALL!!! this should not happen!")
+    #         #     self._sell_jpy(usd_jpy_spot_rate, current_date)
+
     def execute_trades(self):
+        previous_prediction = None  # Initialize with no previous prediction
+
         predicted_categories = self.model.predict()
 
-        print("check predicted_categories: ", predicted_categories)
-
         for index, (row, prediction) in enumerate(zip(self.data.iterrows(), predicted_categories)):
-            # print("row: ", row)
-            print("prediction: ", prediction)
-            usd_brl_spot_rate = row[1]['Adj Close']['USDBRL=X']
-            print("usd_brl_spot_rate: ", usd_brl_spot_rate)
-            current_date = row[0]
-            print("current_date: ", current_date)
-            # daily_change_percentage = row[1]['Daily_Change_Open_to_Close']
-            
-            # if self.jpy_inventory > 0:
-            #     self.daily_return_factors.append(1 + (daily_change_percentage * self.leverage_factor))
+            if previous_prediction:  # Checking if there's a prediction from the previous day
+                # Using current day's data for trading based on the previous day's prediction
+                usd_brl_spot_rate = row[1]['Open']['USDBRL=X']
+                current_date = row[0]
 
-            is_stop_loss_triggered = self._check_stop_loss(usd_brl_spot_rate, current_date)
+                print("Executing trade for date: ", current_date)
+                print("Previous day prediction: ", previous_prediction)
+                print("usd_brl_spot_rate: ", usd_brl_spot_rate)
 
-            if is_stop_loss_triggered:
-                continue
+                is_stop_loss_triggered = self._check_stop_loss(usd_brl_spot_rate, current_date)
+                if is_stop_loss_triggered:
+                    previous_prediction = prediction  # Update prediction for the next loop iteration
+                    continue
 
-            # if prediction == 'Sell' and self.cash >= self.trading_lot:
-            if prediction == 'Sell' and self.cash >= self.trading_lot and ( self.buy_price is None or (self.buy_price is not None and ( usd_brl_spot_rate < self.buy_price * 0.99 or usd_brl_spot_rate > self.buy_price * 1.01) ) ):
-                self._buy_brl(usd_brl_spot_rate, current_date)
-                print("buying USD BRL at : ", usd_brl_spot_rate, current_date)
-            elif prediction == 'Buy' and self.brl_inventory > 0:
-                self._sell_brl(usd_brl_spot_rate, current_date)
-                print("selling USD BRL at : ", usd_brl_spot_rate, current_date)
+                if previous_prediction == 'Sell' and self.cash >= self.trading_lot and (self.buy_price is None or (self.buy_price is not None and (usd_brl_spot_rate < self.buy_price * 0.99 or usd_brl_spot_rate > self.buy_price * 1.01))):
+                    self._buy_brl(usd_brl_spot_rate, current_date)
+                    print("buying USD BRL at: ", usd_brl_spot_rate, current_date)
+                elif previous_prediction == 'Buy' and self.brl_inventory > 0:
+                    self._sell_brl(usd_brl_spot_rate, current_date)
+                    print("selling USD BRL at: ", usd_brl_spot_rate, current_date)
 
-            # if self._check_margin_call(usd_jpy_spot_rate):
-            #     print("MARGIN CALL!!! this should not happen!")
-            #     self._sell_jpy(usd_jpy_spot_rate, current_date)
+            # Update the previous prediction for the next day's trading action
+            previous_prediction = prediction
+
 
     def execute_trades_perfect_future_knowledge(self):
         for index, row in self.data.iterrows():

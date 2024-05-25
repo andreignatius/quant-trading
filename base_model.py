@@ -349,8 +349,8 @@ class BaseModel:
 
             # Assign labels based on peaks and troughs
             self.data[('Label', instrument)] = 'Hold'  # Default label
-            self.data.loc[self.data[('isLocalPeak', instrument)], ('Label', instrument)] = 'Sell'
-            self.data.loc[self.data[('isLocalTrough', instrument)], ('Label', instrument)] = 'Buy'
+            self.data.loc[self.data[('isLocalPeak', instrument)].shift(-1).fillna(False), ('Label', instrument)] = 'Sell'
+            self.data.loc[self.data[('isLocalTrough', instrument)].shift(-1).fillna(False), ('Label', instrument)] = 'Buy'
 
         # Optional: Handle data cleaning if required
         self.data.fillna(method='ffill', inplace=True)
