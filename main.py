@@ -1,8 +1,8 @@
 import pandas as pd
 import yfinance as yf
 
-from logreg_model import LogRegModel
-from trading_strategy import TradingStrategy
+from training.logreg_model import LogRegModel
+from trading.trading_strategy import TradingStrategy
 
 
 def fetch_and_format_data(tickers, start_date, end_date):

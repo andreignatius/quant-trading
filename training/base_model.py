@@ -34,6 +34,21 @@ class BaseModel:
 
         self.fft_features = None
 
+        self.instruments = [
+            "AUDUSD=X",
+            "BZ=F",
+            "CL=F",
+            "GC=F",
+            "NG=F",
+            "NZDUSD=X",
+            "SI=F",
+            "USDAUD=X",
+            "USDBRL=X",
+            "USDCAD=X",
+            "USDNOK=X",
+            "USDZAR=X",
+        ]
+
     def load_preprocess_data(self):
         # Load the data
 
@@ -42,7 +57,6 @@ class BaseModel:
         self.data['Date'] = pd.to_datetime(self.data['Date'])
         self.data.set_index('Date', inplace=True)
 
-        print("222Data loaded: ", self.data.head())
         # Optional: Reinforce that the index is a datetime index (usually not needed)
         # self.data.index = pd.to_datetime(self.data.index)
         # Convert data types to reduce memory usage
@@ -126,9 +140,7 @@ class BaseModel:
 
         # Replace NaN values with the mean
         close_prices[np.isnan(close_prices)] = mean_value
-
-        # print("close_prices: ", close_prices)
-
+        
         # Convert the series to numpy array for FFT
         # close_prices = data_window.to_numpy()
         N = len(close_prices)
@@ -207,33 +219,13 @@ class BaseModel:
         self.data["Slow %D"].bfill(inplace=True)
 
     def detect_fourier_signals(self):
-        # instruments = self.data.columns.get_level_values(
-        #     1
-        # ).unique()  # Assuming MultiIndex with instruments as the second level
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
-
         # Initialize Fourier signal columns for each instrument
-        for instrument in instruments:
+        for instrument in self.instruments:
             self.data[f"FourierSignalSell_{instrument}"] = False
             self.data[f"FourierSignalBuy_{instrument}"] = False
 
         # Process each instrument
-        for instrument in instruments:
-            print(f"Processing Fourier signals for {instrument}")
-            print("checkcheckcheck: ", self.fft_features)
+        for instrument in self.instruments:
             # Get dominant periods, filter, and sort
             dominant_periods = sorted(
                 set(
@@ -246,9 +238,6 @@ class BaseModel:
             ]  # Filter out long periods
             dominant_periods = dominant_periods[:5]  # Take top 5
             print("Dominant Period Lengths for ", instrument, ": ", dominant_periods)
-            # print("!!!!!!!!: ", self.data.columns.get_level_values(1).unique())
-            print("check12345: ", self.data.head())
-            print("check999: ", self.data[f"FourierSignalSell_{instrument}"])
             # Mark the Fourier signals based on the dominant periods
             self.data[f"FourierSignalSell_{instrument}"] = self.data[
                 f"DaysSinceTrough_{instrument}"
@@ -257,32 +246,9 @@ class BaseModel:
                 f"DaysSincePeak_{instrument}"
             ].isin(dominant_periods)
 
-            print(
-                f"FourierSignalSell for {instrument}: ",
-                self.data[f"FourierSignalSell_{instrument}"].sum(),
-            )
-            print(
-                f"FourierSignalBuy for {instrument}: ",
-                self.data[f"FourierSignalBuy_{instrument}"].sum(),
-            )
-
     def detect_rolling_peaks_and_troughs(self, window_size=5):
         # Iterate through each instrument
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
-        for instrument in instruments:
+        for instrument in self.instruments:
             close_key = f"Close_{instrument}" # Adjust this if your 'Close' data is stored differently
 
             # Initialize columns to store results for each instrument
@@ -337,24 +303,8 @@ class BaseModel:
         return rsi
 
     def calculate_moving_averages_and_rsi(self):
-        print("321: ", self.data[f"Close_AUDUSD=X"])
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
         # Initialize Fourier signal columns for each instrument
-        for instrument in instruments:
-            print("11111check instrument: ", instrument)
+        for instrument in self.instruments:
             short_window = 5
             long_window = 20
             rsi_period = 14
@@ -367,8 +317,6 @@ class BaseModel:
             self.data[f"RSI_{instrument}"] = self.calculate_rsi(
                 instrument, window=rsi_period
             )
-
-        print("check_andre: ", self.data["Short_Moving_Avg_AUDUSD=X"])
 
     # Bollinger Bands
     def calculate_bollinger_bands(self):
@@ -391,23 +339,7 @@ class BaseModel:
         ) / (self.data["BBand_Upper"] - self.data["BBand_Lower"])
 
     def construct_kalman_filter(self):
-        # instruments = self.data.columns.get_level_values(1).unique()
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
-
-        for instrument in instruments:
+        for instrument in self.instruments:
             close_prices = self.data[f"Close_{instrument}"]
             # Construct a Kalman Filter
             kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
@@ -456,32 +388,15 @@ class BaseModel:
         self.data = self.data.merge(hurst_exponents, on="Date", how="left")
 
     def calculate_days_since_peaks_and_troughs(self):
-        # Define instrument list if not dynamically fetched
-        # instruments = self.data.columns.get_level_values(1).unique()
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
-
         # Prepare columns for each instrument
-        for instrument in instruments:
+        for instrument in self.instruments:
             self.data[f"DaysSincePeak_{instrument}"] = 0
             self.data[f"DaysSinceTrough_{instrument}"] = 0
             self.data[f"PriceChangeSincePeak_{instrument}"] = 0
             self.data[f"PriceChangeSinceTrough_{instrument}"] = 0
 
         # Iterate over each instrument
-        for instrument in instruments:
+        for instrument in self.instruments:
             checkpoint_date_bottom = None
             checkpoint_date_top = None
             checkpoint_price_bottom = None
@@ -489,7 +404,6 @@ class BaseModel:
 
             # Iterate over rows
             for today_date, row in self.data.iterrows():
-                # print("TODAY_DATE:", today_date)
                 current_price = row[f"Close_{instrument}"]
 
                 # Check for buy/sell signals and update checkpoints
@@ -634,25 +548,9 @@ class BaseModel:
 
 
     def calculate_first_second_order_derivatives(self):
-        instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
-        print("check instruments:", instruments)
-        # print("self.data check135: ", self.data[("Short_Moving_Avg", "AUDUSD=X")])
         # Calculate first and second order derivatives for selected features
         for feature in ["KalmanFilterEst", "Short_Moving_Avg", "Long_Moving_Avg"]:
-            for instrument in instruments:
+            for instrument in self.instruments:
                 self.data[f"{feature}_1st_Deriv_{instrument}"] = (
                     self.data[f"{feature}_{instrument}"].diff() * 100
                 )
