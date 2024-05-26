@@ -1,14 +1,9 @@
-import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import statsmodels.api as sm
-from statsmodels.tsa.stattools import adfuller
-from scipy.signal import find_peaks
-from gtda.homology import VietorisRipsPersistence
-from gtda.plotting import plot_diagram
-import numpy as np
-from base_model import BaseModel  # Assuming the BaseModel class is in a separate file named 'base_model.py'
+import yfinance as yf
+
+from logreg_model import LogRegModel
+from trading_strategy import TradingStrategy
+
 
 def fetch_data(tickers, start_date, end_date):
     """Fetches closing prices for given tickers from Yahoo Finance."""
@@ -19,27 +14,122 @@ def fetch_data(tickers, start_date, end_date):
         print(f"Error fetching data for {tickers}: {e}")
         return pd.DataFrame()
 
+
+def rolling_window_train_predict(
+    data, start_date, end_date, train_duration_months, test_duration_months
+):
+    trade_logs = []
+    final_portfolio_values = []
+    interest_costs_total = []
+    transaction_costs_total = []
+
+    # Convert 'Date' column to datetime if it's not already
+    data.index = pd.to_datetime(data.index)
+    data.sort_index(inplace=True)  # Sort by Date
+
+    start_date = pd.to_datetime(start_date)
+    current_date = start_date
+
+    while current_date < pd.to_datetime(end_date):
+        print("Current period starting:", current_date)
+
+        train_start = current_date
+        train_end = train_start + pd.DateOffset(months=train_duration_months)
+        test_start = train_end
+        test_end = test_start + pd.DateOffset(months=test_duration_months)
+
+        if test_end > pd.to_datetime(end_date):
+            break
+
+        # Filter data for current training and testing periods
+        train_data = data[(data.index >= train_start) & (data.index < train_end)]
+        test_data = data[(data.index >= test_start) & (data.index < test_end)]
+
+        if train_data.empty or test_data.empty:
+            print(
+                "No data available for training or testing for the period starting:",
+                current_date,
+            )
+            current_date += pd.DateOffset(months=test_duration_months)
+            continue
+
+        # Initialize and use the LogRegModel for this window
+        print(
+            "train_start: ",
+            train_start,
+            "train_end: ",
+            train_end,
+            "test_start: ",
+            test_start,
+            "test_end: ",
+            test_end,
+        )
+        model = LogRegModel(
+            "inputs/temp_data.csv", train_start, train_end, test_start, test_end
+        )
+        model.load_preprocess_data()  # Load and preprocess the data
+        model.train_test_split_time_series()  # Split data into training and testing
+        model.train()
+        test_data = model.retrieve_test_set()
+
+        # Instantiate the TradingStrategy class
+        trading_strategy = TradingStrategy(model, test_data)
+        trading_strategy.execute_trades()
+        trading_results = trading_strategy.evaluate_performance()
+
+        # Collect results
+        trade_logs.append(trading_results["Trade Log"])
+        final_portfolio_values.append(trading_results["Final Portfolio Value"])
+        interest_costs_total.append(sum(trading_results["Interest Costs"]))
+        transaction_costs_total.append(trading_results["Transaction Costs"])
+
+        # Move to the next window
+        current_date += pd.DateOffset(months=test_duration_months)
+
+    return (
+        trade_logs,
+        final_portfolio_values,
+        interest_costs_total,
+        transaction_costs_total,
+    )
+
+
 if __name__ == "__main__":
-    tickers = ['BZ=F', 'CL=F', 'GC=F', 'SI=F', 'NG=F', 'USDCAD=X', 'USDNOK=X', 'AUDUSD=X', 'NZDUSD=X', 'USDAUD=X', 'USDZAR=X', 'USDBRL=X']
-    start_date = '2013-01-01'
-    end_date = '2023-01-01'
+    tickers = [
+        "BZ=F",
+        "CL=F",
+        "GC=F",
+        "SI=F",
+        "NG=F",
+        "USDCAD=X",
+        "USDNOK=X",
+        "AUDUSD=X",
+        "NZDUSD=X",
+        "USDAUD=X",
+        "USDZAR=X",
+        "USDBRL=X",
+    ]
+    start_date = "2013-01-01"
+    end_date = "2023-01-01"
     raw_data = fetch_data(tickers, start_date, end_date)
 
     if not raw_data.empty:
-        # Assume file_path is where you save the fetched data temporarily
-        raw_data.to_csv('temp_data.csv')
-        
-        # Initialize and use the BaseModel for advanced analysis
-        model = BaseModel(file_path='temp_data.csv', train_start='2013-01-01', train_end='2018-01-01', test_start='2018-01-01', test_end='2023-01-01')
-        model.load_preprocess_data()  # Load and preprocess the data
-        model.train_test_split_time_series()  # Split data into training and testing
-        model.train()  # Placeholder for training method
-        test_set = model.retrieve_test_set()
+        (
+            trade_logs,
+            final_values,
+            interest_costs_total,
+            transaction_costs_total,
+        ) = rolling_window_train_predict(
+            raw_data,
+            start_date,
+            end_date,
+            12,
+            6,  # 12 months training, 6 months testing
+        )
 
-        # # Use the processed data for further analysis
-        # plot_data(model.data)  # Plot the data with additional features
-        
-        # # Additional analyses could be done here, such as correlation or cointegration on enhanced dataset
-        # correlation_analysis(model.data[['Close'] + [col for col in model.data.columns if 'Kalman' in col or 'RSI' in col]])
+        print("Final trade logs:", trade_logs)
+        print("Final portfolio values:", final_values)
+        print("Interest costs:", interest_costs_total)
+        print("Transaction costs:", transaction_costs_total)
     else:
         print("Data retrieval was unsuccessful.")
