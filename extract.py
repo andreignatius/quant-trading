@@ -5,14 +5,54 @@ from logreg_model import LogRegModel
 from trading_strategy import TradingStrategy
 
 
-def fetch_data(tickers, start_date, end_date):
-    """Fetches closing prices for given tickers from Yahoo Finance."""
+def fetch_and_format_data(tickers, start_date, end_date):
+    """Fetches and formats closing prices for given tickers from Yahoo Finance."""
     try:
         data = yf.download(tickers, start=start_date, end=end_date)
+        if data.empty:
+            print(f"No data fetched for {tickers}.")
+            return pd.DataFrame()
+
+        # Assuming the data might have multi-level columns, flatten them
+        if isinstance(data.columns, pd.MultiIndex):
+            for col in data.columns.values:
+                print("col: ", col)
+            data.columns = ['_'.join(col_tuple[0].split()) + '_' + col_tuple[1] for col_tuple in data.columns.values]
+            print("data.columns: ", data.columns)
+
+        data.index = pd.to_datetime(data.index)
+        data.sort_index(inplace=True)  # Sort by Date
+        print("111Data loaded: ", data.head())
         return data
     except Exception as e:
-        print(f"Error fetching data for {tickers}: {e}")
+        print(f"Error fetching and formatting data for {tickers}: {e}")
         return pd.DataFrame()
+
+# def fetch_and_format_data(tickers, start_date, end_date):
+#     """Fetches and formats closing prices for given tickers from Yahoo Finance."""
+#     try:
+#         data = yf.download(tickers, start=start_date, end=end_date)
+#         if data.empty:
+#             print(f"No data fetched for {tickers}.")
+#             return pd.DataFrame()
+
+#         # Clean up the DataFrame if initial rows contain NaN or metadata
+#         if data.index[0] != pd.to_datetime(data.index[0]):
+#             data = data.iloc[1:]  # Assuming first row is erroneous
+
+#         data.index = pd.to_datetime(data.index)  # Ensure index is datetime
+#         data.sort_index(inplace=True)  # Sort by Date
+
+#         # Flatten multi-level columns if present
+#         if isinstance(data.columns, pd.MultiIndex):
+#             data.columns = ["_".join(col).strip() for col in data.columns.values]
+
+#         return data
+
+#     except Exception as e:
+#         print(f"Error fetching and formatting data for {tickers}: {e}")
+#         return pd.DataFrame()
+
 
 
 def rolling_window_train_predict(
@@ -22,10 +62,6 @@ def rolling_window_train_predict(
     final_portfolio_values = []
     interest_costs_total = []
     transaction_costs_total = []
-
-    # Convert 'Date' column to datetime if it's not already
-    data.index = pd.to_datetime(data.index)
-    data.sort_index(inplace=True)  # Sort by Date
 
     start_date = pd.to_datetime(start_date)
     current_date = start_date
@@ -41,17 +77,8 @@ def rolling_window_train_predict(
         if test_end > pd.to_datetime(end_date):
             break
 
-        # Filter data for current training and testing periods
         train_data = data[(data.index >= train_start) & (data.index < train_end)]
         test_data = data[(data.index >= test_start) & (data.index < test_end)]
-
-        if train_data.empty or test_data.empty:
-            print(
-                "No data available for training or testing for the period starting:",
-                current_date,
-            )
-            current_date += pd.DateOffset(months=test_duration_months)
-            continue
 
         # Initialize and use the LogRegModel for this window
         print(
@@ -67,8 +94,8 @@ def rolling_window_train_predict(
         model = LogRegModel(
             "inputs/temp_data.csv", train_start, train_end, test_start, test_end
         )
-        model.load_preprocess_data()  # Load and preprocess the data
-        model.train_test_split_time_series()  # Split data into training and testing
+        model.load_preprocess_data()
+        model.train_test_split_time_series()
         model.train()
         test_data = model.retrieve_test_set()
 
@@ -77,13 +104,11 @@ def rolling_window_train_predict(
         trading_strategy.execute_trades()
         trading_results = trading_strategy.evaluate_performance()
 
-        # Collect results
         trade_logs.append(trading_results["Trade Log"])
         final_portfolio_values.append(trading_results["Final Portfolio Value"])
         interest_costs_total.append(sum(trading_results["Interest Costs"]))
         transaction_costs_total.append(trading_results["Transaction Costs"])
 
-        # Move to the next window
         current_date += pd.DateOffset(months=test_duration_months)
 
     return (
@@ -111,22 +136,20 @@ if __name__ == "__main__":
     ]
     start_date = "2013-01-01"
     end_date = "2023-01-01"
-    raw_data = fetch_data(tickers, start_date, end_date)
+    raw_data = fetch_and_format_data(tickers, start_date, end_date)
+
+    raw_data.to_csv('inputs/temp_data.csv', index=True)
 
     if not raw_data.empty:
-        (
-            trade_logs,
-            final_values,
-            interest_costs_total,
-            transaction_costs_total,
-        ) = rolling_window_train_predict(
-            raw_data,
-            start_date,
-            end_date,
-            12,
-            6,  # 12 months training, 6 months testing
+        trade_logs, final_values, interest_costs_total, transaction_costs_total = (
+            rolling_window_train_predict(
+                raw_data,
+                start_date,
+                end_date,
+                12,
+                6,  # 12 months training, 6 months testing
+            )
         )
-
         print("Final trade logs:", trade_logs)
         print("Final portfolio values:", final_values)
         print("Interest costs:", interest_costs_total)

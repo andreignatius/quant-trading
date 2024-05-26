@@ -35,7 +35,8 @@ class TradingStrategy:
         ):
             if previous_prediction:  # Checking if there's a prediction from the previous day
                 # Using current day's data for trading based on the previous day's prediction
-                usd_brl_spot_rate = row[1]['Open']['USDBRL=X']
+                # print("555row: ", row[1])
+                usd_brl_spot_rate = row[1]['Open_USDBRL=X']
                 current_date = row[0]
 
                 print("Executing trade for date: ", current_date)
@@ -205,7 +206,7 @@ class TradingStrategy:
         self.interest_costs.append(interest_charge)
 
     def evaluate_performance(self):
-        final_usd_brl_spot_rate = self.data.iloc[-1]["Adj Close"]["USDBRL=X"]
+        final_usd_brl_spot_rate = self.data.iloc[-1]["Adj_Close_USDBRL=X"]
         # final_portfolio_value = self.cash + (self.jpy_inventory / final_usd_jpy_spot_rate)
         final_portfolio_value = self._compute_mtm(final_usd_brl_spot_rate)
         print("final_portfolio_value000: ", final_portfolio_value)
