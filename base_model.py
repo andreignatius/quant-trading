@@ -45,22 +45,7 @@ class BaseModel:
 
 
     def load_preprocess_data(self):
-        # # Load the data
-        # self.data = pd.read_csv(
-        #     self.file_path,
-        #     header=[0, 1],  # Assuming there are two header rows
-        #     index_col=0,  # Date column as the index
-        #     parse_dates=[0],
-        # )  # Parse the index as date
-        # # print("check data: ", self.data.head())
-        # # # Adjust the headers and skip unnecessary rows if needed
-        # # self.data = pd.read_csv(
-        # #     self.file_path,
-        # #     skiprows=lambda x: x in [0, 1],  # Adjust based on where your actual data starts
-        # #     header=0  # Assuming the actual headers start from the first row after skips
-        # # )
-        # # self.data.columns = self.data.columns.str.replace(' ', '_')  # Normalize column names
-        # self.data.ffill(inplace=True)  # Forward fill missing data
+        # Load the data
 
         # self.data = pd.read_csv(self.file_path)
         self.data = pd.read_csv(self.file_path)
@@ -151,29 +136,7 @@ class BaseModel:
 
         data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
         print("333data_window: ", data_window)
-
-        # close_prices = data_window['Close'].to_numpy()
-
-
-        # # Convert self.train_end to datetime if it's a string
-        # self.train_end = to_datetime(self.train_end)
-
-        # # Calculate the date one year before train_end
-        # d1 = self.train_end - DateOffset(months=12)
-        # d2 = self.train_end
-
-        # print("check000: ", type(d1))
-        # print("check111: ", type(self.train_end))
-        # print("check222: ", self.data.index)
-
-        # # Filter data within the date range and for a specific instrument
-        # # data_window = self.data.loc[
-        # #     (self.data.index >= d1) & (self.data.index < d2), f"Adj_Close_{instrument}"
-        # # ]
-        # # print("data_window: ", data_window)
-
-        # data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
-        # print("333data_window: ", data_window)
+        
         print("check12345:", data_window[f"Adj_Close_{instrument}"])
         close_prices = data_window[f"Adj_Close_{instrument}"].to_numpy()
 

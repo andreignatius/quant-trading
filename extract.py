@@ -27,33 +27,7 @@ def fetch_and_format_data(tickers, start_date, end_date):
     except Exception as e:
         print(f"Error fetching and formatting data for {tickers}: {e}")
         return pd.DataFrame()
-
-# def fetch_and_format_data(tickers, start_date, end_date):
-#     """Fetches and formats closing prices for given tickers from Yahoo Finance."""
-#     try:
-#         data = yf.download(tickers, start=start_date, end=end_date)
-#         if data.empty:
-#             print(f"No data fetched for {tickers}.")
-#             return pd.DataFrame()
-
-#         # Clean up the DataFrame if initial rows contain NaN or metadata
-#         if data.index[0] != pd.to_datetime(data.index[0]):
-#             data = data.iloc[1:]  # Assuming first row is erroneous
-
-#         data.index = pd.to_datetime(data.index)  # Ensure index is datetime
-#         data.sort_index(inplace=True)  # Sort by Date
-
-#         # Flatten multi-level columns if present
-#         if isinstance(data.columns, pd.MultiIndex):
-#             data.columns = ["_".join(col).strip() for col in data.columns.values]
-
-#         return data
-
-#     except Exception as e:
-#         print(f"Error fetching and formatting data for {tickers}: {e}")
-#         return pd.DataFrame()
-
-
+        
 
 def rolling_window_train_predict(
     data, start_date, end_date, train_duration_months, test_duration_months
