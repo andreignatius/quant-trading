@@ -22,8 +22,6 @@ class BaseModel:
         self.test_start = test_start
         self.test_end = test_end
 
-        self.X = None
-        self.y = None
         self.X_train = None
         self.X_test = None
         self.y_train = None
@@ -31,18 +29,10 @@ class BaseModel:
         self.X_train_scaled = None
         self.X_test_scaled = None
 
-        self.split_idx = None
-
         self.model = None
         self.scaler = StandardScaler()
 
-        self.criterion = None
-        self.optimizer = None
-
         self.fft_features = None
-
-        self.predicted_categories = None
-
 
     def load_preprocess_data(self):
         # Load the data
@@ -94,9 +84,6 @@ class BaseModel:
 
         # self.preprocess_data()
 
-    # def calculate_daily_percentage_change(self):
-    #     self.data['Daily_Change'] = self.data['Close'].pct_change() * 100
-    #     self.data['Daily_Change_Open_to_Close'] = ( ( self.data['Open'] - self.data['Close'].shift(1) ) / self.data['Close'].shift(1) ) * 100
     def calculate_daily_percentage_change(self):
         # Loop through each instrument's 'Close' column
         for instrument in [
@@ -127,17 +114,11 @@ class BaseModel:
 
     def perform_fourier_transform_analysis(self, instrument="CL=F"):
         # Fourier Transform Analysis
-        # close_prices = self.data['Close'].to_numpy()
-        print("check000: ", type(self.train_end - pd.DateOffset(months=12)))
-        print("check111: ", type(self.train_end))
-        # print("check222: ", self.data['Date'])
         d1 = self.train_end - pd.DateOffset(months=12)
         d2 = self.train_end
 
         data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
-        print("333data_window: ", data_window)
-        
-        print("check12345:", data_window[f"Adj_Close_{instrument}"])
+
         close_prices = data_window[f"Adj_Close_{instrument}"].to_numpy()
 
         # Compute the mean of non-NaN values

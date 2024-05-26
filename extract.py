@@ -10,8 +10,7 @@ def fetch_and_format_data(tickers, start_date, end_date):
     try:
         data = yf.download(tickers, start=start_date, end=end_date)
         if data.empty:
-            print(f"No data fetched for {tickers}.")
-            return pd.DataFrame()
+            raise ValueError(f"No data fetched for {tickers}. Please check your tickers or date range.")
 
         # Assuming the data might have multi-level columns, flatten them
         if isinstance(data.columns, pd.MultiIndex):
@@ -26,8 +25,8 @@ def fetch_and_format_data(tickers, start_date, end_date):
         return data
     except Exception as e:
         print(f"Error fetching and formatting data for {tickers}: {e}")
-        return pd.DataFrame()
-        
+        raise e
+
 
 def rolling_window_train_predict(
     data, start_date, end_date, train_duration_months, test_duration_months
@@ -114,19 +113,16 @@ if __name__ == "__main__":
 
     raw_data.to_csv('inputs/temp_data.csv', index=True)
 
-    if not raw_data.empty:
-        trade_logs, final_values, interest_costs_total, transaction_costs_total = (
-            rolling_window_train_predict(
-                raw_data,
-                start_date,
-                end_date,
-                12,
-                6,  # 12 months training, 6 months testing
-            )
+    trade_logs, final_values, interest_costs_total, transaction_costs_total = (
+        rolling_window_train_predict(
+            raw_data,
+            start_date,
+            end_date,
+            12,
+            6,  # 12 months training, 6 months testing
         )
-        print("Final trade logs:", trade_logs)
-        print("Final portfolio values:", final_values)
-        print("Interest costs:", interest_costs_total)
-        print("Transaction costs:", transaction_costs_total)
-    else:
-        print("Data retrieval was unsuccessful.")
+    )
+    print("Final trade logs:", trade_logs)
+    print("Final portfolio values:", final_values)
+    print("Interest costs:", interest_costs_total)
+    print("Transaction costs:", transaction_costs_total)
