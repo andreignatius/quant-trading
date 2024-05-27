@@ -23,7 +23,7 @@ class TradingStrategy:
         self.leverage_factor = leverage_factor
         self.trade_log = []
         self.buy_price = None
-        self.brl_inventory = 0
+        self.lcy_inventory = 0
         self.annual_interest_rate = annual_interest_rate
         self.daily_return_factors = []
         self.interest_costs = []
@@ -41,15 +41,15 @@ class TradingStrategy:
                 previous_prediction
             ):  # Checking if there's a prediction from the previous day
                 # Using current day's data for trading based on the previous day's prediction
-                usd_brl_spot_rate = row[1][f"Open_{self.trading_instrument}"]
+                usd_lcy_spot_rate = row[1][f"Open_{self.trading_instrument}"]
                 current_date = row[0]
 
                 # print("Executing trade for date: ", current_date)
                 # print("Previous day prediction: ", previous_prediction)
-                # print("usd_brl_spot_rate: ", usd_brl_spot_rate)
+                # print("usd_lcy_spot_rate: ", usd_lcy_spot_rate)
 
                 is_stop_loss_triggered = self._check_stop_loss(
-                    usd_brl_spot_rate, current_date
+                    usd_lcy_spot_rate, current_date
                 )
                 if is_stop_loss_triggered:
                     previous_prediction = (
@@ -65,17 +65,17 @@ class TradingStrategy:
                         or (
                             self.buy_price is not None
                             and (
-                                usd_brl_spot_rate < self.buy_price * 0.99
-                                or usd_brl_spot_rate > self.buy_price * 1.01
+                                usd_lcy_spot_rate < self.buy_price * 0.99
+                                or usd_lcy_spot_rate > self.buy_price * 1.01
                             )
                         )
                     )
                 ):
-                    self._buy_brl(usd_brl_spot_rate, current_date)
-                    # print("buying USD BRL at: ", usd_brl_spot_rate, current_date)
-                elif previous_prediction == "Buy" and self.brl_inventory > 0:
-                    self._sell_brl(usd_brl_spot_rate, current_date)
-                    # print("selling USD BRL at: ", usd_brl_spot_rate, current_date)
+                    self._buy_lcy(usd_lcy_spot_rate, current_date)
+                    print(f"buying {self.trading_instrument} at {usd_lcy_spot_rate}, {current_date}")
+                elif previous_prediction == "Buy" and self.lcy_inventory > 0:
+                    self._sell_lcy(usd_lcy_spot_rate, current_date)
+                    print(f"selling {self.trading_instrument} at {usd_lcy_spot_rate}, {current_date}")
 
             # Update the previous prediction for the next day's trading action
             previous_prediction = prediction
@@ -120,15 +120,15 @@ class TradingStrategy:
                 print("MARGIN CALL!!! this should not happen!")
                 self._sell_jpy(usd_jpy_spot_rate, current_date)
 
-    def _buy_brl(self, rate, date):
-        brl_bought = int(self.trading_lot * self.leverage_factor * rate)
-        self.brl_inventory += brl_bought
+    def _buy_lcy(self, rate, date):
+        lcy_bought = int(self.trading_lot * self.leverage_factor * rate)
+        self.lcy_inventory += lcy_bought
         self.cash -= self.trading_lot
         self.buy_price = rate
-        self.trade_log.append(f"111Buy {brl_bought} BRL at {rate} on {date}")
+        self.trade_log.append(f"111Buy {lcy_bought} BRL at {rate} on {date}")
 
-    def _sell_brl(self, rate, date, forced=False):
-        if self.brl_inventory <= 0:
+    def _sell_lcy(self, rate, date, forced=False):
+        if self.lcy_inventory <= 0:
             return
 
         # jpy_convert_to_usd = ( self.jpy_inventory / rate ) / self.leverage_factor
@@ -140,22 +140,22 @@ class TradingStrategy:
             else "Margin call / stop-loss triggered"
         )
         self.trade_log.append(
-            f"111Sell {self.brl_inventory} BRL at {rate} on {date} ({sell_reason})"
+            f"111Sell {self.lcy_inventory} BRL at {rate} on {date} ({sell_reason})"
         )
 
         self._apply_interest_charge(rate)
 
-        self.brl_inventory = 0
+        self.lcy_inventory = 0
         self.daily_return_factors = []
 
-    def _compute_mtm(self, usd_brl_spot_rate):
-        if self.brl_inventory <= 0:
+    def _compute_mtm(self, usd_lcy_spot_rate):
+        if self.lcy_inventory <= 0:
             return self.cash
 
         # Calculate the current value of the JPY inventory at the current spot rate
-        current_value = self.brl_inventory / usd_brl_spot_rate
+        current_value = self.lcy_inventory / usd_lcy_spot_rate
         # Calculate the invested amount (in USD) for the JPY inventory
-        invested_amount = self.brl_inventory / self.buy_price
+        invested_amount = self.lcy_inventory / self.buy_price
         pnl = current_value - invested_amount
         principal = self.trading_lot
         # MTM is the current value minus the invested amount, adjusted for the cash
@@ -166,11 +166,11 @@ class TradingStrategy:
         # return mtm - total_interest
         return mtm
 
-    def _check_stop_loss(self, usd_brl_spot_rate, date):
-        if self.brl_inventory > 0:
-            change_percentage = (usd_brl_spot_rate - self.buy_price) / self.buy_price
+    def _check_stop_loss(self, usd_lcy_spot_rate, date):
+        if self.lcy_inventory > 0:
+            change_percentage = (usd_lcy_spot_rate - self.buy_price) / self.buy_price
             if change_percentage * self.leverage_factor > self.stop_loss_threshold:
-                self._sell_brl(usd_brl_spot_rate, date, forced=True)
+                self._sell_lcy(usd_lcy_spot_rate, date, forced=True)
                 print("!!!STOP LOSS TRIGGERED!!!")
                 return True
         return False
@@ -185,18 +185,18 @@ class TradingStrategy:
         days_held = len(self.daily_return_factors)
         daily_interest_rate = (1 + self.annual_interest_rate) ** (1 / 365) - 1
         # interest_charge = ( self.jpy_inventory / rate ) * daily_interest_rate * days_held
-        borrowed_quantum = self.brl_inventory - (
-            self.brl_inventory / self.leverage_factor
+        borrowed_quantum = self.lcy_inventory - (
+            self.lcy_inventory / self.leverage_factor
         )
         interest_charge = (borrowed_quantum / rate) * daily_interest_rate * days_held
         self.interest_costs.append(interest_charge)
 
     def evaluate_performance(self):
-        final_usd_brl_spot_rate = self.data.iloc[-1][f"Adj_Close_{self.trading_instrument}"]
+        final_usd_lcy_spot_rate = self.data.iloc[-1][f"Adj_Close_{self.trading_instrument}"]
         # final_portfolio_value = self.cash + (self.jpy_inventory / final_usd_jpy_spot_rate)
-        final_portfolio_value = self._compute_mtm(final_usd_brl_spot_rate)
+        final_portfolio_value = self._compute_mtm(final_usd_lcy_spot_rate)
         print("final_portfolio_value000: ", final_portfolio_value)
-        print("shares: ", self.brl_inventory)
+        print("shares: ", self.lcy_inventory)
         pnl_per_trade = (
             (final_portfolio_value - self.starting_cash) / len(self.trade_log)
             if self.trade_log
