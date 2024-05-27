@@ -201,8 +201,8 @@ class BaseModel:
         )
 
         # Handle any NaN values that may have been created
-        self.data[f"%K_{self.trading_instrument}"].fillna(method="bfill", inplace=True)
-        self.data[f"%D_{self.trading_instrument}"].fillna(method="bfill", inplace=True)
+        self.data[f"%K_{self.trading_instrument}"].bfill(inplace=True)
+        self.data[f"%D_{self.trading_instrument}"].bfill(inplace=True)
 
     def calculate_slow_stochastic_oscillator(self, d_window=3, slow_k_window=3):
         """
@@ -291,7 +291,7 @@ class BaseModel:
             ] = "Buy"
 
         # Optional: Handle data cleaning if required
-        self.data.fillna(method="ffill", inplace=True)
+        self.data.ffill(inplace=True)
 
     # Calculating Moving Averages and RSI manually
     def calculate_rsi(self, instrument, window=14):
@@ -675,7 +675,7 @@ class BaseModel:
         self.X_test = self.test_data[feature_set]
         self.y_train = self.train_data[f"Label_{self.trading_instrument}"]
         self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
-        self.data.fillna(method="ffill", inplace=True)
+        self.data.ffill(inplace=True)
 
         print("len X train: ", len(self.X_train))
         print("len X test: ", len(self.X_test))
