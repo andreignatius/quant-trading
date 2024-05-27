@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 class BaseModel:
-    def __init__(self, file_path, train_start, train_end, test_start, test_end):
+    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
         self.file_path = file_path
         # self.model_type = model_type
         self.data = None
@@ -48,6 +48,8 @@ class BaseModel:
             "USDNOK=X",
             "USDZAR=X",
         ]
+
+        self.trading_instrument = "USDBRL=X"
 
     def load_preprocess_data(self):
         # Load the data
@@ -126,21 +128,21 @@ class BaseModel:
                     (self.data[open_key] - self.data[adj_close_key].shift(1)) / self.data[adj_close_key].shift(1) * 100
                 )
 
-    def perform_fourier_transform_analysis(self, instrument="CL=F"):
+    def perform_fourier_transform_analysis(self):
         # Fourier Transform Analysis
         d1 = self.train_end - pd.DateOffset(months=12)
         d2 = self.train_end
 
         data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
 
-        close_prices = data_window[f"Adj_Close_{instrument}"].to_numpy()
+        close_prices = data_window[f"Adj_Close_{self.trading_instrument}"].to_numpy()
 
         # Compute the mean of non-NaN values
         mean_value = np.nanmean(close_prices)
 
         # Replace NaN values with the mean
         close_prices[np.isnan(close_prices)] = mean_value
-        
+
         # Convert the series to numpy array for FFT
         # close_prices = data_window.to_numpy()
         N = len(close_prices)
@@ -167,7 +169,7 @@ class BaseModel:
         )
 
     def calculate_stochastic_oscillator(
-        self, k_window=14, d_window=3, slow_k_window=3, instrument="CL=F"
+        self, k_window=14, d_window=3, slow_k_window=3
     ):
         """
         Calculate the Stochastic Oscillator.
@@ -185,22 +187,22 @@ class BaseModel:
         # Use MultiIndex to specify levels if DataFrame has multi-level columns
         # Adjust instrument as needed or generalize for multiple instruments
         # Calculate %K
-        low_min = self.data[f"Adj_Close_{instrument}"].rolling(window=k_window).min()
-        high_max = self.data[f"Adj_Close_{instrument}"].rolling(window=k_window).max()
-        current_close = self.data[f"Adj_Close_{instrument}"]
+        low_min = self.data[f"Adj_Close_{self.trading_instrument}"].rolling(window=k_window).min()
+        high_max = self.data[f"Adj_Close_{self.trading_instrument}"].rolling(window=k_window).max()
+        current_close = self.data[f"Adj_Close_{self.trading_instrument}"]
 
-        self.data[f"%K_{instrument}"] = (
+        self.data[f"%K_{self.trading_instrument}"] = (
             100 * (current_close - low_min) / (high_max - low_min)
         )
 
         # Calculate %D as the moving average of %K
-        self.data[f"%D_{instrument}"] = (
-            self.data[f"%K_{instrument}"].rolling(window=d_window).mean()
+        self.data[f"%D_{self.trading_instrument}"] = (
+            self.data[f"%K_{self.trading_instrument}"].rolling(window=d_window).mean()
         )
 
         # Handle any NaN values that may have been created
-        self.data[f"%K_{instrument}"].fillna(method="bfill", inplace=True)
-        self.data[f"%D_{instrument}"].fillna(method="bfill", inplace=True)
+        self.data[f"%K_{self.trading_instrument}"].fillna(method="bfill", inplace=True)
+        self.data[f"%D_{self.trading_instrument}"].fillna(method="bfill", inplace=True)
 
     def calculate_slow_stochastic_oscillator(self, d_window=3, slow_k_window=3):
         """
@@ -620,7 +622,7 @@ class BaseModel:
     def preprocess_data(self):
         self.data.dropna(inplace=True)
 
-    def train_test_split_time_series(self, instrument="USDBRL=X"):
+    def train_test_split_time_series(self):
         # Ensure 'Date' is the DataFrame index
         if not isinstance(self.data.index, pd.DatetimeIndex):
             self.data["Date"] = pd.to_datetime(self.data.index)
@@ -655,10 +657,10 @@ class BaseModel:
             # 'Short_Moving_Avg_2nd_Deriv',
             # 'Long_Moving_Avg_2nd_Deriv',
             # 'RSI',
-            f"DaysSincePeak_{instrument}",
-            f"DaysSinceTrough_{instrument}",
-            f"FourierSignalSell_{instrument}",
-            f"FourierSignalBuy_{instrument}",
+            f"DaysSincePeak_{self.trading_instrument}",
+            f"DaysSinceTrough_{self.trading_instrument}",
+            f"FourierSignalSell_{self.trading_instrument}",
+            f"FourierSignalBuy_{self.trading_instrument}",
             # f"%K_{instrument}",
             # f"%D_{instrument}",
             # 'Slow %K',
@@ -671,8 +673,8 @@ class BaseModel:
         # Extract the features for training and testing sets
         self.X_train = self.train_data[feature_set]
         self.X_test = self.test_data[feature_set]
-        self.y_train = self.train_data[f"Label_{instrument}"]
-        self.y_test = self.test_data[f"Label_{instrument}"]
+        self.y_train = self.train_data[f"Label_{self.trading_instrument}"]
+        self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
         self.data.fillna(method="ffill", inplace=True)
 
         print("len X train: ", len(self.X_train))

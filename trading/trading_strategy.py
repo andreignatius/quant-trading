@@ -4,6 +4,7 @@ class TradingStrategy:
         self,
         model,
         data,
+        trading_instrument,
         start_cash=10000,
         trading_lot=7500,
         stop_loss_threshold=0.05,
@@ -13,6 +14,7 @@ class TradingStrategy:
     ):
         self.model = model
         self.data = data
+        self.trading_instrument = trading_instrument
         self.cash = start_cash
         self.margin_requirement = start_cash * margin_call_threshold
         self.starting_cash = start_cash
@@ -39,12 +41,12 @@ class TradingStrategy:
                 previous_prediction
             ):  # Checking if there's a prediction from the previous day
                 # Using current day's data for trading based on the previous day's prediction
-                usd_brl_spot_rate = row[1]["Open_USDBRL=X"]
+                usd_brl_spot_rate = row[1][f"Open_{self.trading_instrument}"]
                 current_date = row[0]
 
-                print("Executing trade for date: ", current_date)
-                print("Previous day prediction: ", previous_prediction)
-                print("usd_brl_spot_rate: ", usd_brl_spot_rate)
+                # print("Executing trade for date: ", current_date)
+                # print("Previous day prediction: ", previous_prediction)
+                # print("usd_brl_spot_rate: ", usd_brl_spot_rate)
 
                 is_stop_loss_triggered = self._check_stop_loss(
                     usd_brl_spot_rate, current_date
@@ -70,10 +72,10 @@ class TradingStrategy:
                     )
                 ):
                     self._buy_brl(usd_brl_spot_rate, current_date)
-                    print("buying USD BRL at: ", usd_brl_spot_rate, current_date)
+                    # print("buying USD BRL at: ", usd_brl_spot_rate, current_date)
                 elif previous_prediction == "Buy" and self.brl_inventory > 0:
                     self._sell_brl(usd_brl_spot_rate, current_date)
-                    print("selling USD BRL at: ", usd_brl_spot_rate, current_date)
+                    # print("selling USD BRL at: ", usd_brl_spot_rate, current_date)
 
             # Update the previous prediction for the next day's trading action
             previous_prediction = prediction
@@ -152,16 +154,13 @@ class TradingStrategy:
 
         # Calculate the current value of the JPY inventory at the current spot rate
         current_value = self.brl_inventory / usd_brl_spot_rate
-        print("current_value: ", current_value)
         # Calculate the invested amount (in USD) for the JPY inventory
         invested_amount = self.brl_inventory / self.buy_price
-        print("invested_amount: ", invested_amount)
         pnl = current_value - invested_amount
         principal = self.trading_lot
         # MTM is the current value minus the invested amount, adjusted for the cash
         mtm = self.cash + principal + pnl
 
-        print("mtm: ", mtm)
         # # Subtracting total interest charges from the MTM
         # total_interest = sum(self.interest_costs)
         # return mtm - total_interest
@@ -193,7 +192,7 @@ class TradingStrategy:
         self.interest_costs.append(interest_charge)
 
     def evaluate_performance(self):
-        final_usd_brl_spot_rate = self.data.iloc[-1]["Adj_Close_USDBRL=X"]
+        final_usd_brl_spot_rate = self.data.iloc[-1][f"Adj_Close_{self.trading_instrument}"]
         # final_portfolio_value = self.cash + (self.jpy_inventory / final_usd_jpy_spot_rate)
         final_portfolio_value = self._compute_mtm(final_usd_brl_spot_rate)
         print("final_portfolio_value000: ", final_portfolio_value)
