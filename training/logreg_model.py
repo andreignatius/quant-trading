@@ -1,6 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 
-from base_model import BaseModel
+from .base_model import BaseModel
 
 
 class LogRegModel(BaseModel):
@@ -28,9 +28,7 @@ class LogRegModel(BaseModel):
         # self.model.fit(self.X_train_scaled, self.y_train)
         print("check X train: ", self.X_train)
         print("check y train: ", self.y_train)
-        y_train = self.y_train["USDBRL=X"]
-        print("check y_train2: ", y_train)
-        self.model.fit(self.X_train, y_train)
+        self.model.fit(self.X_train, self.y_train)
 
     def predict(self):
         # self.data['PredictedLabel'] = self.model.predict(self.scaler.transform(self.X))
