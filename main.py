@@ -29,7 +29,7 @@ def fetch_and_format_data(tickers, start_date, end_date):
 
 
 def rolling_window_train_predict(
-    data, start_date, end_date, train_duration_months, test_duration_months
+    data, start_date, end_date, train_duration_months, test_duration_months, trading_instrument
 ):
     trade_logs = []
     final_portfolio_values = []
@@ -65,7 +65,7 @@ def rolling_window_train_predict(
             test_end,
         )
         model = LogRegModel(
-            "inputs/temp_data.csv", train_start, train_end, test_start, test_end
+            "inputs/temp_data.csv", train_start, train_end, test_start, test_end, trading_instrument
         )
         model.load_preprocess_data()
         model.train_test_split_time_series()
@@ -73,7 +73,7 @@ def rolling_window_train_predict(
         test_data = model.retrieve_test_set()
 
         # Instantiate the TradingStrategy class
-        trading_strategy = TradingStrategy(model, test_data)
+        trading_strategy = TradingStrategy(model, test_data, trading_instrument)
         trading_strategy.execute_trades()
         trading_results = trading_strategy.evaluate_performance()
 
@@ -113,6 +113,8 @@ if __name__ == "__main__":
 
     raw_data.to_csv('inputs/temp_data.csv', index=True)
 
+    trading_instrument = "USDBRL=X"
+
     trade_logs, final_values, interest_costs_total, transaction_costs_total = (
         rolling_window_train_predict(
             raw_data,
@@ -120,6 +122,7 @@ if __name__ == "__main__":
             end_date,
             12,
             6,  # 12 months training, 6 months testing
+            trading_instrument, # USDBRL testing
         )
     )
     print("Final trade logs:", trade_logs)

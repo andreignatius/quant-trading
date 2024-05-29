@@ -4,8 +4,8 @@ from .base_model import BaseModel
 
 
 class LogRegModel(BaseModel):
-    def __init__(self, file_path, train_start, train_end, test_start, test_end):
-        super().__init__(file_path, train_start, train_end, test_start, test_end)
+    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
+        super().__init__(file_path, train_start, train_end, test_start, test_end, trading_instrument)
         # Elastic Net parameters
         l1_ratio = 0.5  # L1 weight in the range [0,1]. 0 is L2, 1 is L1.
         alpha = 1.0  # Regularization strength. Higher values mean more regularization.
