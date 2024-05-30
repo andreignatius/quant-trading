@@ -1,12 +1,18 @@
-yfinance==0.1.74
-pandas==1.4.3
+giotto-tda==0.6.1
+hurst==0.0.5
 matplotlib==3.5.2
-seaborn==0.11.2
-scipy==1.8.1
-giotto-tda==0.6.0
+pandas==1.4.3
 patsy==0.5.6
-statsmodels==0.14.2
 pykalman==0.9.7
+scipy==1.8.1
+seaborn==0.11.2
+sklearn==1.4.2
+statsmodels==0.14.2
+<<<<<<< HEAD
+pykalman==0.9.7
+=======
+yfinance==0.1.74
+>>>>>>> 7af94d83a5b38ef7043a85a1c09b36d6c062b133
 numpy>=1.19.1
 joblib>=0.16.0
 scikit-learn>=0.23.1
