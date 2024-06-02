@@ -125,7 +125,7 @@ class TradingStrategy:
         self.lcy_inventory += lcy_bought
         self.cash -= self.trading_lot
         self.buy_price = rate
-        self.trade_log.append(f"111Buy {lcy_bought} BRL at {rate} on {date}")
+        self.trade_log.append(f"Buy,{lcy_bought},BRL,{rate},{date},{self.leverage_factor},NA")
 
     def _sell_lcy(self, rate, date, forced=False):
         if self.lcy_inventory <= 0:
@@ -140,7 +140,7 @@ class TradingStrategy:
             else "Margin call / stop-loss triggered"
         )
         self.trade_log.append(
-            f"111Sell {self.lcy_inventory} BRL at {rate} on {date} ({sell_reason})"
+            f"Sell,{self.lcy_inventory},BRL,{rate},{date},{self.leverage_factor},{sell_reason}"
         )
 
         self._apply_interest_charge(rate)

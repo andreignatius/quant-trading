@@ -1,5 +1,6 @@
 import pandas as pd
 import yfinance as yf
+import csv
 
 from training.logreg_model import LogRegModel
 from trading.trading_strategy import TradingStrategy
@@ -125,6 +126,20 @@ if __name__ == "__main__":
             trading_instrument, # USDBRL testing
         )
     )
+    
+    # Specify the CSV file name
+    filename = "trade_log.csv"
+
+    # Open the file in write mode
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow('trade_type,lcy_bought,lcy,rate,date,leverage,comment'.split(","))
+        # Write each row of data
+        for trade_period in trade_logs:
+            for trade in trade_period:
+                print("trade: ", trade)
+                writer.writerow(trade.split(','))
+
     print("Final trade logs:", trade_logs)
     print("Final portfolio values:", final_values)
     print("Interest costs:", interest_costs_total)
