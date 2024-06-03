@@ -15,7 +15,7 @@ class PairsTrader:
         self._end_date = end_date
         self._item1 = item1
         self._item2 = item2
-
+        self._normport = [0, 0]
         # get the good stuff from yahoo finance
         self._item1data = yf.Ticker(item1).history(
             start=start_date, end=end_date, interval=interval
@@ -115,9 +115,9 @@ class PairsTrader:
 
         thresh_list is z score threshold to short/long
         """
-        normport = [1, -self.gamma] / (1 + self.gamma)
+        self._normport = [1, -self.gamma] / (1 + self.gamma)
         self._df_together_weighted = (
-            normport * self._df_together[[self._item1, self._item2]]
+            self._normport * self._df_together[[self._item1, self._item2]]
         )
         self._df_together_weighted["spread"] = (
             self._df_together_weighted[self._item1]
@@ -205,6 +205,13 @@ class PairsTrader:
         ].cumsum()
         self.index_for_pnl = df_z["Datetime"]
 
+        self._df_together_weighted[f"{self._item1}_ratio"] = (
+            self._df_together_weighted["position"] * self._normport[0]
+        )
+        self._df_together_weighted[f"{self._item2}_ratio"] = (
+            self._df_together_weighted["position"] * self._normport[1]
+        )
+
         # this returns the final DataFrame that also contains trade logs
         return self._df_together_weighted
 
@@ -264,3 +271,5 @@ if __name__ == "__main__":
 
     # NOTE THAT THIS IS POSITION SIGNAL, NOT BUY / SELL SIGNAL !
     print(myTradeResult)
+
+    myTradeResult.to_csv("traderesult.csv")
