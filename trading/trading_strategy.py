@@ -34,7 +34,9 @@ class TradingStrategy:
     def execute_trades(self):
         previous_prediction = None  # Initialize with no previous prediction
 
-        predicted_categories = self.model.predict()
+        # predicted_categories = self.model.predict()
+        if self.is_rule_based:
+            predicted_categories = self.model.final_rachel()
 
         for index, (row, prediction) in enumerate(
             zip(self.data.iterrows(), predicted_categories)
@@ -49,6 +51,8 @@ class TradingStrategy:
                 # print("Executing trade for date: ", current_date)
                 # print("Previous day prediction: ", previous_prediction)
                 # print("usd_lcy_spot_rate: ", usd_lcy_spot_rate)
+
+
 
                 is_stop_loss_triggered = self._check_stop_loss(
                     usd_lcy_spot_rate, current_date
