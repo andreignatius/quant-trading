@@ -11,6 +11,7 @@ class TradingStrategy:
         leverage_factor=4,
         margin_call_threshold=0.5,
         annual_interest_rate=0.03,
+        is_rule_based = False,
     ):
         self.model = model
         self.data = data
@@ -27,6 +28,7 @@ class TradingStrategy:
         self.annual_interest_rate = annual_interest_rate
         self.daily_return_factors = []
         self.interest_costs = []
+        self.is_rule_based = is_rule_based
 
 
     def execute_trades(self):

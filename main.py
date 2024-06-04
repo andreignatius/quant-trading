@@ -73,9 +73,16 @@ def rolling_window_train_predict(
         model.train()
         test_data = model.retrieve_test_set()
 
+        model2 = LinearModel(
+            "inputs/temp_data.csv", train_start, train_end, test_start, test_end, trading_instrument
+        )
+
         # Instantiate the TradingStrategy class
-        trading_strategy = TradingStrategy(model, test_data, trading_instrument)
+        trading_strategy = TradingStrategy(model, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
+        trading_strategy_2 = TradingStrategy(model2, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
+        trading_strategy_3 = TradingStrategy(rules, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
         trading_strategy.execute_trades()
+        trading_strategy_2.execute_trades()
         trading_results = trading_strategy.evaluate_performance()
 
         trade_logs.append(trading_results["Trade Log"])

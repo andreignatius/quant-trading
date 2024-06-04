@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 class BaseModel:
-    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
+    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument, naming="Andre"):
         self.file_path = file_path
         # self.model_type = model_type
         self.data = None
@@ -33,6 +33,8 @@ class BaseModel:
         self.scaler = StandardScaler()
 
         self.fft_features = None
+
+        self.naming = naming
 
         self.instruments = [
             "AUDUSD=X",
@@ -95,10 +97,31 @@ class BaseModel:
         self.calculate_moving_averages_and_rsi()
         self.calculate_first_second_order_derivatives()
 
+        self.rachel_rule1()
+        self.rachel_rule2()
+        self.final_rachel()
+
         # self.integrate_tbill_data()
         # self.integrate_currency_account_data()
 
         # self.preprocess_data()
+
+    def rachel_rule1(self):
+        self.data['Rachel_indicator1'] = "up/down"
+
+        ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
+        self.data["Trade1"] = rachel_signal
+
+    def rachel_rule2(self):
+        self.data['Rachel_indicator2'] = "up/down"
+
+        ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
+        self.data["Trade2"] = rachel_signal
+
+    def final_rachel(self):
+        if self.data["Trade1"] and self.data["Trade2"]:
+            self.data["Decision"] = ["Buy", "Sell", "Sell", "Buy", "Hold"]
+        return self.data["Decision"]
 
     def calculate_daily_percentage_change(self):
         # Loop through each instrument's 'Close' column
@@ -670,12 +693,34 @@ class BaseModel:
             # 'Interest_Rate_Difference_Change'
         ]
 
+        feature_set2 = [
+            # List your features here
+            # 'Short_Moving_Avg_2nd_Deriv',
+            # 'Long_Moving_Avg_2nd_Deriv',
+            # 'RSI',
+            f"Rachel_{self.trading_instrument}",
+            f"Rachel_{self.trading_instrument}",
+            # f"%K_{instrument}",
+            # f"%D_{instrument}",
+            # 'Slow %K',
+            # 'Slow %D',
+            # 'KalmanFilterEst_1st_Deriv',
+            # 'KalmanFilterEst_2nd_Deriv',
+            # 'Interest_Rate_Difference_Change'
+        ]
+
         # Extract the features for training and testing sets
         self.X_train = self.train_data[feature_set]
         self.X_test = self.test_data[feature_set]
         self.y_train = self.train_data[f"Label_{self.trading_instrument}"]
         self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
         self.data.ffill(inplace=True)
+
+        if (self.naming == "Rachel"):
+            self.X_train = self.train_data[feature_set2]
+            self.X_test = self.test_data[feature_set2]
+            self.y_train = self.train_data[f"Label_{self.trading_instrument}"]
+            self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
 
         print("len X train: ", len(self.X_train))
         print("len X test: ", len(self.X_test))
