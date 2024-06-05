@@ -854,6 +854,7 @@ class BaseModel:
         high_col = f'High_{instrument}'
         # Calculate Kijun-Sen (base line)
         self.data[f'kijun_sen_baseline_{instrument}'] = donchian_channel(self.data, period)
+    
 
     def integrate_tbill_data(self):
         file_path_JPYTBill = "data/JPY_1Y_TBill_GJTB12MO.csv"
