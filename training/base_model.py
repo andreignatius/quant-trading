@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import talib
 from gtda.diagrams import BettiCurve
 from gtda.homology import VietorisRipsPersistence
 from gtda.time_series import SlidingWindow
@@ -96,9 +97,17 @@ class BaseModel:
         # self.calculate_betti_curves()
         self.calculate_moving_averages_and_rsi()
         self.calculate_first_second_order_derivatives()
+        
+        self.ut_bot()
+        self.WAE()
+        self.BPMI()
+        self.kijun_sen()
+        self.T3MA_ATR()
+        self.calculate_aroon()
+        self.ssl_channel()
 
-        self.rachel_rule1()
-        self.rachel_rule2()
+        self.nnfx_rule()
+        self.ssl_rule()
         self.final_rachel()
 
         # self.integrate_tbill_data()
@@ -106,15 +115,56 @@ class BaseModel:
 
         # self.preprocess_data()
 
-    def rachel_rule1(self):
-        self.data['Rachel_indicator1'] = "up/down"
+    def nnfx_rule(self):
+        ut_buy = (self.data[f'ut_buy_{self.trading_instrument}'] == 1) | (self.data[f'ut_buy_{self.trading_instrument}'] == 1)
+        ut_sell = (self.data[f'ut_sell_{self.trading_instrument}'] == 1) | (self.data[f'ut_sell_{self.trading_instrument}'] == 1)
+        wae_buy_trend = (self.data[f'WAE_trend_up_{self.trading_instrument}'] > 0)
+        wae_sell_trend = (self.data[f'WAE_trend_up_{self.trading_instrument}'] > 0)
+        wae_buy_el = (self.data[f'WAE_trend_up_{self.trading_instrument}'] > self.data[f'WAE_el_{self.trading_instrument}'])
+        wae_sell_el = (self.data[f'WAE_trend_down_{self.trading_instrument}'] > self.data[f'WAE_el_{self.trading_instrument}'])
+        baseline_buy = (self.data[f'Close_{self.trading_instrument}'] > self.data[f't3_{self.trading_instrument}'])
+        baseline_sell = (self.data[f'Close_{self.trading_instrument}'] < self.data[f't3_{self.trading_instrument}'])
+        conflict_signal = ((self.data[f'ut_buy_{self.trading_instrument}'] == 1) & baseline_sell) | ((self.data[f'ut_sell_{self.trading_instrument}'] == 1) & baseline_buy)
+        cross_up = (self.data[f'AROON_up_{self.trading_instrument}'].shift(1) < self.data[f'AROON_down_{self.trading_instrument}'].shift(1)) & \
+        (self.data[f'AROON_up_{self.trading_instrument}'] > self.data[f'AROON_down_{self.trading_instrument}'])
+
+        cross_down = (self.data[f'AROON_down_{self.trading_instrument}'].shift(1) < self.data[f'AROON_up_{self.trading_instrument}'].shift(1)) & \
+        (self.data[f'AROON_down_{self.trading_instrument}'] > self.data[f'AROON_up_{self.trading_instrument}'])
+
+        buy_signal = ut_buy & wae_buy_trend & wae_buy_el & baseline_buy
+        exit_buy_signal = cross_up | conflict_signal
+        sell_signal = ut_sell & wae_sell_trend & wae_sell_el & baseline_sell
+        exit_sell_signal = cross_down | conflict_signal
+        combined_signal = np.zeros(len(self.data))
+        current_position = None
+        ###################### Need to modify to buy hold sell ###############
 
         ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
         self.data["Trade1"] = rachel_signal
 
-    def rachel_rule2(self):
-        self.data['Rachel_indicator2'] = "up/down"
+    def ssl_rule(self):
+        cross_up_ssl = (self.data[f'sslUp_{self.trading_instrument}'].shift(1) < self.data[f'sslDown_{self.trading_instrument}'].shift(1)) & \
+        (self.data[f'sslUp_{self.trading_instrument}'] > self.data[f'sslDown_{self.trading_instrument}'])
+        
+        cross_down_ssl = (self.data[f'sslDown_{self.trading_instrument}'].shift(1) < self.data[f'sslUp_{self.trading_instrument}'].shift(1)) & \
+        (self.data[f'sslDown_{self.trading_instrument}'] > self.data[f'sslUp_{self.trading_instrument}'])
 
+        kijun_buy = (self.data[f'Close_{self.trading_instrument}'] > self.data[f'kijun_sen_baseline_{self.trading_instrument}'])
+        kijun_sell = (self.data[f'Close_{self.trading_instrument}'] < self.data[f'kijun_sen_baseline_{self.trading_instrument}'])
+
+        wae_buy = (self.data[f'WAE_trend_up_{self.trading_instrument}'] > 0) & \
+            (self.data[f'WAE_trend_up_{self.trading_instrument}'] > self.data[f'WAE_el_{self.trading_instrument}']) & \
+            (self.data[f'WAE_trend_up_{self.trading_instrument}'] > self.data[f'WAE_dead_zone_{self.trading_instrument}'])
+        
+        wae_sell = (self.data[f'WAE_trend_down_{self.trading_instrument}'] > 0) & \
+            (self.data[f'WAE_trend_down_{self.trading_instrument}'] > self.data[f'WAE_el_{self.trading_instrument}']) & \
+            (self.data[f'WAE_trend_down_{self.trading_instrument}'] > self.data[f'WAE_dead_zone_{self.trading_instrument}'])
+
+        buy_signal = cross_up_ssl & kijun_buy & wae_buy
+        sell_signal = cross_down_ssl & kijun_sell & wae_sell
+        exit_buy_signal = cross_down_ssl
+        exit_sell_signal = cross_up_ssl
+        ###################### Need to modify to buy hold sell ###############
         ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
         self.data["Trade2"] = rachel_signal
 
@@ -586,6 +636,225 @@ class BaseModel:
         # Fill NaN values that were generated by diff()
         self.data.bfill(inplace=True)
 
+    def ut_bot(self, key_value=2, atr_period=10):
+        # Calculate EMA with a span of 1
+        def pine_ema(src, length):
+            alpha = 2 / (length + 1)
+            sum_series = np.zeros_like(src)
+            sum_series[0] = src[0]
+            for i in range(1, len(src)):
+                sum_series[i] = alpha * src[i] + (1 - alpha) * sum_series[i - 1]
+            return sum_series
+        
+        # Define the crossover function
+        def crossover(series1, series2):
+            return (series1 > series2) & (series1.shift() < series2.shift())
+
+        instrument = self.trading_instrument
+        close_col = f'Close_{instrument}'
+        high_col = f'High_{instrument}'
+        low_col = f'Low_{instrument}'
+        print(close_col, high_col, low_col)
+        src = self.data[close_col]
+        high = self.data[high_col]
+        low = self.data[low_col]
+
+        # Calculate ATR
+        atr = talib.ATR(high, low, src, timeperiod=atr_period)
+        n_loss = key_value * atr
+
+        # Initialize ATR Trailing Stop
+        xatr_trailing_stop = np.zeros(len(src))
+
+        for i in range(1, len(src)):
+            prev_stop = xatr_trailing_stop[i - 1]
+            if src[i] > prev_stop and src[i - 1] > prev_stop:
+                xatr_trailing_stop[i] = max(prev_stop, src[i] - n_loss[i])
+            elif src[i] < prev_stop and src[i - 1] < prev_stop:
+                xatr_trailing_stop[i] = min(prev_stop, src[i] + n_loss[i])
+            elif src[i] > prev_stop:
+                xatr_trailing_stop[i] = src[i] - n_loss[i]
+            else:
+                xatr_trailing_stop[i] = src[i] + n_loss[i]
+
+        # Determine positions
+        position = np.zeros(len(src))
+        for i in range(1, len(src)):
+            if src[i - 1] < xatr_trailing_stop[i - 1] and src[i] > xatr_trailing_stop[i - 1]:
+                position[i] = 1
+            elif src[i - 1] > xatr_trailing_stop[i - 1] and src[i] < xatr_trailing_stop[i - 1]:
+                position[i] = -1
+            else:
+                position[i] = position[i - 1]
+
+        ema = pine_ema(src, length=1)
+
+        # Calculate crossovers
+        above = crossover(pd.Series(ema), pd.Series(xatr_trailing_stop))
+        below = crossover(pd.Series(xatr_trailing_stop), pd.Series(ema))
+
+        # Define buy and sell conditions
+        buy = np.where((src.values > xatr_trailing_stop) & above, 1, 0)
+        sell = np.where((src.values < xatr_trailing_stop) & below, 1, 0)
+
+        # Add the buy and sell columns to the dataframe
+        self.data[f'ut_buy_{instrument}'] = buy
+        self.data[f'ut_sell_{instrument}'] = sell
+
+    def BPMI(self, length=15, smoothing=6):
+        instrument = self.trading_instrument
+        close_col = f'Close_{instrument}'
+
+        # Calculate Polychromatic Momentum Indicator
+        mom = self.data[close_col] - self.data[close_col].shift(length)
+        pmi = mom - (mom - mom.shift(length)) / length
+
+        # Smoothed PMI
+        sm_pmi = pmi.rolling(window=smoothing).mean()
+
+        # Add the smoothed PMI column to the dataframe
+        self.data[f'sm_pmi_{instrument}'] = sm_pmi
+
+    def WAE(self, sensitivity=80, fast_length=22, slow_length=45, channel_length=25, mult=2.0):
+        def rma(source, length):
+            alpha = 1 / length
+            sum_value = np.zeros_like(source, dtype=np.float64)
+            
+            for i in range(len(source)):
+                if i == 0:
+                    sum_value[i] = np.nan  # Set the first value as NaN since it's not available
+                elif np.isnan(sum_value[i - 1]):
+                    sum_value[i] = np.mean(source[:length])  # Calculate SMA for the first available value
+                else:
+                    sum_value[i] = alpha * source[i] + (1 - alpha) * sum_value[i - 1]  # Calculate RMA
+                    
+            return sum_value
+
+        def calculate_macd(source, fast_length, slow_length):
+            fast_ma = talib.EMA(source, timeperiod=fast_length)
+            slow_ma = talib.EMA(source, timeperiod=slow_length)
+            return fast_ma - slow_ma
+
+        def calculate_bb_upper(source, length, mult):
+            basis = talib.SMA(source, timeperiod=length)
+            dev = mult * talib.STDDEV(source, timeperiod=length)
+            return basis + dev
+
+        def calculate_bb_lower(source, length, mult):
+            basis = talib.SMA(source, timeperiod=length)
+            dev = mult * talib.STDDEV(source, timeperiod=length)
+            return basis - dev
+
+        instrument = self.trading_instrument
+        high_col = f'High_{instrument}'
+        low_col = f'Low_{instrument}'
+        close_col = f'Close_{instrument}'
+
+        data = self.data[[high_col, low_col, close_col]].copy()
+
+        # Calculate ATR and Dead Zone
+        data['tr'] = talib.TRANGE(data[high_col], data[low_col], data[close_col])
+        data['rma_tr'] = rma(data['tr'], length=100)
+        data['dead_zone'] = data['rma_tr'] * 3.7
+
+        # Calculate MACD values
+        macd_current = calculate_macd(data[close_col], fast_length, slow_length)
+        macd_previous = calculate_macd(data[close_col].shift(1), fast_length, slow_length)
+        data['t1'] = (macd_current - macd_previous) * sensitivity
+
+        # Calculate Bollinger Bands width
+        data['bb_upper'] = calculate_bb_upper(data[close_col], channel_length, mult)
+        data['bb_lower'] = calculate_bb_lower(data[close_col], channel_length, mult)
+        data['e1'] = data['bb_upper'] - data['bb_lower']
+
+        # Determine trend direction
+        data['trend_up'] = np.where(data['t1'] >= 0, data['t1'], 0)
+        data['trend_down'] = np.where(data['t1'] < 0, -data['t1'], 0)
+
+        # Add the final columns to the main dataframe
+        self.data[f'WAE_trend_up_{instrument}'] = data['trend_up']
+        self.data[f'WAE_trend_down_{instrument}'] = data['trend_down']
+        self.data[f'WAE_e1_{instrument}'] = data['e1']
+        self.data[f'WAE_dead_zone_{instrument}'] = data['dead_zone']
+
+    def T3MA_ATR(self, length=20, factor=0.4):
+        def rma(source, length):
+            alpha = 1 / length
+            sum_value = np.zeros_like(source, dtype=np.float64)
+            
+            for i in range(len(source)):
+                if i == 0:
+                    sum_value[i] = np.nan  # Set the first value as NaN since it's not available
+                elif np.isnan(sum_value[i - 1]):
+                    sum_value[i] = np.mean(source[:length])  # Calculate SMA for the first available value
+                else:
+                    sum_value[i] = alpha * source[i] + (1 - alpha) * sum_value[i - 1]  # Calculate RMA
+                    
+            return sum_value
+    
+        instrument = self.trading_instrument
+        close_col = f'Close_{instrument}'
+        high_col = f'High_{instrument}'
+        low_col = f'Low_{instrument}'
+
+        self.data[f't3_{instrument}'] = talib.T3(self.data[close_col], length, factor)
+        self.data[f'tr_{instrument}'] = talib.TRANGE(self.data[high_col], self.data[low_col], self.data[close_col])
+        self.data[f'atr_{instrument}'] = rma(self.data[f'tr_{instrument}'], 14)
+        self.data[f'atr_upper_{instrument}'] = self.data[f't3_{instrument}'] + self.data[f'atr_{instrument}']
+        self.data[f'atr_lower_{instrument}'] = self.data[f't3_{instrument}'] - self.data[f'atr_{instrument}']
+
+        # Drop intermediate columns
+        # self.data.drop([f'tr_{instrument}', f'atr_{instrument}'], axis=1, inplace=True)        
+    def calculate_aroon(self, length = 10):
+        high_col = f'High_{self.trading_instrument}'
+        low_col = f'Low_{self.trading_instrument}'
+        self.data[f'AROON_down_{self.trading_instrument}'], self.data[f'AROON_up_{self.trading_instrument}'] = \
+        talib.AROON(self.data[high_col], self.data[low_col], length)
+
+
+    def ssl_channel(self, length=10):
+        instrument = self.trading_instrument
+        high_col = f'High_{instrument}'
+        low_col = f'Low_{instrument}'
+        close_col = f'Close_{instrument}'
+
+        # Calculate SMAs of high and low prices
+        self.data[f'smaHigh_{instrument}'] = self.data[high_col].rolling(window=length).mean()
+        self.data[f'smaLow_{instrument}'] = self.data[low_col].rolling(window=length).mean()
+
+        # Initialize Hlv (Horizontal Line Value)
+        self.data[f'Hlv_{instrument}'] = np.nan
+
+        # Determine Hlv values
+        for i in range(len(self.data)):
+            if pd.notnull(self.data[close_col].iloc[i]):
+                if self.data[close_col].iloc[i] > self.data[f'smaHigh_{instrument}'].iloc[i]:
+                    self.data[f'Hlv_{instrument}'].iloc[i] = 1
+                elif self.data[close_col].iloc[i] < self.data[f'smaLow_{instrument}'].iloc[i]:
+                    self.data[f'Hlv_{instrument}'].iloc[i] = -1
+                else:
+                    self.data[f'Hlv_{instrument}'].iloc[i] = self.data[f'Hlv_{instrument}'].iloc[i - 1]
+
+        # Calculate sslDown and sslUp
+        self.data[f'sslDown_{instrument}'] = np.where(self.data[f'Hlv_{instrument}'] < 0, self.data[f'smaHigh_{instrument}'], self.data[f'smaLow_{instrument}'])
+        self.data[f'sslUp_{instrument}'] = np.where(self.data[f'Hlv_{instrument}'] < 0, self.data[f'smaLow_{instrument}'], self.data[f'smaHigh_{instrument}'])
+
+        # Drop intermediate columns
+        self.data.drop([f'smaHigh_{instrument}', f'smaLow_{instrument}', f'Hlv_{instrument}'], axis=1, inplace=True)
+            
+    def kijun_sen(self, period=26):
+        # Define function to calculate Donchian channel
+        def donchian_channel(data, length):
+            lowest_low = data[low_col].rolling(window=length).min()
+            highest_high = data[high_col].rolling(window=length).max()
+            return (lowest_low + highest_high) / 2
+        
+        instrument = self.trading_instrument
+        low_col = f'Low_{instrument}'
+        high_col = f'High_{instrument}'
+        # Calculate Kijun-Sen (base line)
+        self.data[f'kijun_sen_baseline_{instrument}'] = donchian_channel(self.data, period)
+
     def integrate_tbill_data(self):
         file_path_JPYTBill = "data/JPY_1Y_TBill_GJTB12MO.csv"
         file_path_USTBill = "data/USD_1Y_TBill_H15T1Y.csv"
@@ -698,8 +967,7 @@ class BaseModel:
             # 'Short_Moving_Avg_2nd_Deriv',
             # 'Long_Moving_Avg_2nd_Deriv',
             # 'RSI',
-            f"Rachel_{self.trading_instrument}",
-            f"Rachel_{self.trading_instrument}",
+            f"Close_{self.trading_instrument}",
             # f"%K_{instrument}",
             # f"%D_{instrument}",
             # 'Slow %K',
