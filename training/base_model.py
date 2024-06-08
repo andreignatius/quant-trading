@@ -13,9 +13,8 @@ from sklearn.preprocessing import StandardScaler
 
 
 class BaseModel:
-    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument, naming="Andre"):
+    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument, model_name="logreg"):
         self.file_path = file_path
-        # self.model_type = model_type
         self.data = None
 
         self.train_start = train_start
@@ -35,7 +34,7 @@ class BaseModel:
 
         self.fft_features = None
 
-        self.naming = naming
+        self.model_name = model_name
 
         self.instruments = [
             "AUDUSD=X",
@@ -108,7 +107,7 @@ class BaseModel:
 
         self.nnfx_rule()
         self.ssl_rule()
-        self.final_rachel()
+        self.lookahead_6steps()
 
         # self.integrate_tbill_data()
         # self.integrate_currency_account_data()
@@ -136,11 +135,28 @@ class BaseModel:
         sell_signal = ut_sell & wae_sell_trend & wae_sell_el & baseline_sell
         exit_sell_signal = cross_down | conflict_signal
         combined_signal = np.zeros(len(self.data))
-        current_position = None
+        current_position = 0  # 0 for no position, 1 for long, -1 for short
+
+        for i in range(len(self.data)):
+            if current_position == 0:
+                if buy_signal[i]:
+                    current_position = 1
+                elif sell_signal[i]:
+                    current_position = -1
+            
+            elif current_position == 1:
+                if exit_buy_signal[i]:
+                    current_position = 0
+            elif current_position == -1:
+                if exit_sell_signal[i]:
+                    current_position = 0
+            
+            combined_signal[i] = current_position
+        
+        self.data[f'nnfx_signal'] = combined_signal
         ###################### Need to modify to buy hold sell ###############
 
         ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
-        self.data["Trade1"] = rachel_signal
 
     def ssl_rule(self):
         cross_up_ssl = (self.data[f'sslUp_{self.trading_instrument}'].shift(1) < self.data[f'sslDown_{self.trading_instrument}'].shift(1)) & \
@@ -164,14 +180,29 @@ class BaseModel:
         sell_signal = cross_down_ssl & kijun_sell & wae_sell
         exit_buy_signal = cross_down_ssl
         exit_sell_signal = cross_up_ssl
+
+        combined_signal = np.zeros(len(self.data))
+        current_position = 0  # 0 for no position, 1 for long, -1 for short
+
+        for i in range(len(self.data)):
+            if current_position == 0:
+                if buy_signal[i]:
+                    current_position = 1
+                elif sell_signal[i]:
+                    current_position = -1
+            
+            elif current_position == 1:
+                if exit_buy_signal[i]:
+                    current_position = 0
+            elif current_position == -1:
+                if exit_sell_signal[i]:
+                    current_position = 0
+            
+            combined_signal[i] = current_position
         ###################### Need to modify to buy hold sell ###############
         ''' based on Racheld_indicator1 attach buy / sell signal to self.data '''
-        self.data["Trade2"] = rachel_signal
+        self.data[f"ssl_signal"] = combined_signal
 
-    def final_rachel(self):
-        if self.data["Trade1"] and self.data["Trade2"]:
-            self.data["Decision"] = ["Buy", "Sell", "Sell", "Buy", "Hold"]
-        return self.data["Decision"]
 
     def calculate_daily_percentage_change(self):
         # Loop through each instrument's 'Close' column
@@ -855,6 +886,12 @@ class BaseModel:
         # Calculate Kijun-Sen (base line)
         self.data[f'kijun_sen_baseline_{instrument}'] = donchian_channel(self.data, period)
     
+    def rsi_range(self, rsi_lbs = [i for i in range(2,25)]):
+        for lb in rsi_lbs:
+            self.data[f'RSI_{lb}_{self.trading_instrument}'] = talib.RSI(self.data['Close'], lb)
+    
+    def lookahead_6steps(self, lookahead = 6):
+        self.data[f'pcarsi_y_{self.trading_instrument}'] = np.log(self.data['Close']).diff(lookahead).shift(-lookahead)
 
     def integrate_tbill_data(self):
         file_path_JPYTBill = "data/JPY_1Y_TBill_GJTB12MO.csv"
@@ -963,20 +1000,7 @@ class BaseModel:
             # 'Interest_Rate_Difference_Change'
         ]
 
-        feature_set2 = [
-            # List your features here
-            # 'Short_Moving_Avg_2nd_Deriv',
-            # 'Long_Moving_Avg_2nd_Deriv',
-            # 'RSI',
-            f"Close_{self.trading_instrument}",
-            # f"%K_{instrument}",
-            # f"%D_{instrument}",
-            # 'Slow %K',
-            # 'Slow %D',
-            # 'KalmanFilterEst_1st_Deriv',
-            # 'KalmanFilterEst_2nd_Deriv',
-            # 'Interest_Rate_Difference_Change'
-        ]
+        feature_set2 = [f"Close_{self.trading_instrument}"] +  [f'RSI_{lb}_{self.trading_instrument}' for lb in range(2,25)]
 
         # Extract the features for training and testing sets
         self.X_train = self.train_data[feature_set]
@@ -985,11 +1009,11 @@ class BaseModel:
         self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
         self.data.ffill(inplace=True)
 
-        if (self.naming == "Rachel"):
+        if (self.model_name == "pcarsi"):
             self.X_train = self.train_data[feature_set2]
             self.X_test = self.test_data[feature_set2]
-            self.y_train = self.train_data[f"Label_{self.trading_instrument}"]
-            self.y_test = self.test_data[f"Label_{self.trading_instrument}"]
+            self.y_train = self.train_data[f"pcarsi_y_{self.trading_instrument}"]
+            self.y_test = self.test_data[f"pcarsi_y_{self.trading_instrument}"]
 
         print("len X train: ", len(self.X_train))
         print("len X test: ", len(self.X_test))
