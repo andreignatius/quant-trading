@@ -12,7 +12,15 @@ from sklearn.preprocessing import StandardScaler
 
 
 class BaseModel:
-    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
+    def __init__(
+        self,
+        file_path,
+        train_start,
+        train_end,
+        test_start,
+        test_end,
+        trading_instrument,
+    ):
         self.file_path = file_path
         # self.model_type = model_type
         self.data = None
@@ -34,20 +42,7 @@ class BaseModel:
 
         self.fft_features = None
 
-        self.instruments = [
-            "AUDUSD=X",
-            "BZ=F",
-            "CL=F",
-            "GC=F",
-            "NG=F",
-            "NZDUSD=X",
-            "SI=F",
-            "USDAUD=X",
-            "USDBRL=X",
-            "USDCAD=X",
-            "USDNOK=X",
-            "USDZAR=X",
-        ]
+        self.instruments = ["spread"]
 
         self.trading_instrument = "USDBRL=X"
 
@@ -56,20 +51,22 @@ class BaseModel:
 
         # self.data = pd.read_csv(self.file_path)
         self.data = pd.read_csv(self.file_path)
-        self.data['Date'] = pd.to_datetime(self.data['Date'])
-        self.data.set_index('Date', inplace=True)
+        self.data["Date"] = pd.to_datetime(self.data["Date"])
+        self.data.set_index("Date", inplace=True)
+        print("inside preprocess")
+        print(self.data)
 
         # Optional: Reinforce that the index is a datetime index (usually not needed)
         # self.data.index = pd.to_datetime(self.data.index)
         # Convert data types to reduce memory usage
-        for dtype in ["float64", "int64"]:
-            selected_dtype = "float32" if dtype == "float64" else "int32"
-            self.data.loc[
-                :, self.data.select_dtypes(include=[dtype]).columns
-            ] = self.data.select_dtypes(include=[dtype]).astype(selected_dtype)
+        # for dtype in ["float64", "int64"]:
+        #    selected_dtype = "float32" if dtype == "float64" else "int32"
+        #    self.data.loc[:, self.data.select_dtypes(include=[dtype]).columns] = (
+        #        self.data.select_dtypes(include=[dtype]).astype(selected_dtype)
+        #    )
 
-        # Forward fill missing data
-        self.data.ffill(inplace=True)
+        # Forwar#d fill missing data
+        # self.data.ffill(inplace=True)
 
         # Print the first few rows to check if loaded correctly
         print(self.data.head())
@@ -116,26 +113,31 @@ class BaseModel:
             "USDNOK=X",
             "USDZAR=X",
         ]:
-            adj_close_key = f"Adj_Close_{instrument}"
+            adj_close_key = f"Adj_{instrument}"
             open_key = f"Open_{instrument}"
             # Calculate daily percentage change for each 'Close' column
             if adj_close_key in self.data.columns:
-                self.data[f"Daily_Change_{instrument}"] = self.data[adj_close_key].pct_change() * 100
+                self.data[f"Daily_Change_{instrument}"] = (
+                    self.data[adj_close_key].pct_change() * 100
+                )
 
             # Calculate the daily change from open to previous close
             if open_key in self.data.columns and adj_close_key in self.data.columns:
-                self.data[f"Daily_Change_Open_to_Close_{instrument}"] = (
-                    (self.data[open_key] - self.data[adj_close_key].shift(1)) / self.data[adj_close_key].shift(1) * 100
+                self.data[f"Daily_Change_Open_to_{instrument}"] = (
+                    (self.data[open_key] - self.data[adj_close_key].shift(1))
+                    / self.data[adj_close_key].shift(1)
+                    * 100
                 )
 
     def perform_fourier_transform_analysis(self):
         # Fourier Transform Analysis
-        d1 = self.train_end - pd.DateOffset(months=12)
-        d2 = self.train_end
 
-        data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
+        print(self.data)
+        data_window = self.data[self.train_start : self.train_end]
 
-        close_prices = data_window[f"Adj_Close_{self.trading_instrument}"].to_numpy()
+        # data_window = self.data[(self.data.index >= d1) & (self.data.index < d2)].copy()
+
+        close_prices = data_window["spread"].to_numpy()
 
         # Compute the mean of non-NaN values
         mean_value = np.nanmean(close_prices)
@@ -168,9 +170,7 @@ class BaseModel:
             }
         )
 
-    def calculate_stochastic_oscillator(
-        self, k_window=14, d_window=3, slow_k_window=3
-    ):
+    def calculate_stochastic_oscillator(self, k_window=14, d_window=3, slow_k_window=3):
         """
         Calculate the Stochastic Oscillator.
         %K = (Current Close - Lowest Low)/(Highest High - Lowest Low) * 100
@@ -187,8 +187,16 @@ class BaseModel:
         # Use MultiIndex to specify levels if DataFrame has multi-level columns
         # Adjust instrument as needed or generalize for multiple instruments
         # Calculate %K
-        low_min = self.data[f"Adj_Close_{self.trading_instrument}"].rolling(window=k_window).min()
-        high_max = self.data[f"Adj_Close_{self.trading_instrument}"].rolling(window=k_window).max()
+        low_min = (
+            self.data[f"Adj_Close_{self.trading_instrument}"]
+            .rolling(window=k_window)
+            .min()
+        )
+        high_max = (
+            self.data[f"Adj_Close_{self.trading_instrument}"]
+            .rolling(window=k_window)
+            .max()
+        )
         current_close = self.data[f"Adj_Close_{self.trading_instrument}"]
 
         self.data[f"%K_{self.trading_instrument}"] = (
@@ -251,7 +259,10 @@ class BaseModel:
     def detect_rolling_peaks_and_troughs(self, window_size=5):
         # Iterate through each instrument
         for instrument in self.instruments:
-            close_key = f"Close_{instrument}" # Adjust this if your 'Close' data is stored differently
+            print(instrument)
+            close_key = (
+                instrument  # Adjust this if your 'Close' data is stored differently
+            )
 
             # Initialize columns to store results for each instrument
             self.data[f"isLocalPeak_{instrument}"] = False
@@ -277,17 +288,19 @@ class BaseModel:
                 troughs_global_indices = [
                     close_series.index[start_idx + t] for t in troughs
                 ]
-                self.data.loc[
-                    troughs_global_indices, f"isLocalTrough_{instrument}"
-                ] = True
+                self.data.loc[troughs_global_indices, f"isLocalTrough_{instrument}"] = (
+                    True
+                )
 
             # Assign labels based on peaks and troughs
             self.data[f"Label_{instrument}"] = "Hold"  # Default label
             self.data.loc[
-                self.data[f"isLocalPeak_{instrument}"].shift(-1).fillna(False), f"Label_{instrument}"
+                self.data[f"isLocalPeak_{instrument}"].shift(-1).fillna(False),
+                f"Label_{instrument}",
             ] = "Sell"
             self.data.loc[
-                self.data[f"isLocalTrough_{instrument}"].shift(-1).fillna(False), f"Label_{instrument}"
+                self.data[f"isLocalTrough_{instrument}"].shift(-1).fillna(False),
+                f"Label_{instrument}",
             ] = "Buy"
 
         # Optional: Handle data cleaning if required
@@ -296,7 +309,7 @@ class BaseModel:
     # Calculating Moving Averages and RSI manually
     def calculate_rsi(self, instrument, window=14):
         """Calculate the Relative Strength Index (RSI) for a given dataset and window"""
-        delta = self.data[f"Close_{instrument}"].diff()
+        delta = self.data[f"{instrument}"].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
 
@@ -311,10 +324,10 @@ class BaseModel:
             long_window = 20
             rsi_period = 14
             self.data[f"Short_Moving_Avg_{instrument}"] = (
-                self.data[f"Close_{instrument}"].rolling(window=short_window).mean()
+                self.data[f"{instrument}"].rolling(window=short_window).mean()
             )
             self.data[f"Long_Moving_Avg_{instrument}"] = (
-                self.data[f"Close_{instrument}"].rolling(window=long_window).mean()
+                self.data[f"{instrument}"].rolling(window=long_window).mean()
             )
             self.data[f"RSI_{instrument}"] = self.calculate_rsi(
                 instrument, window=rsi_period
@@ -342,7 +355,7 @@ class BaseModel:
 
     def construct_kalman_filter(self):
         for instrument in self.instruments:
-            close_prices = self.data[f"Close_{instrument}"]
+            close_prices = self.data["spread"]
             # Construct a Kalman Filter
             kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
 
@@ -406,7 +419,7 @@ class BaseModel:
 
             # Iterate over rows
             for today_date, row in self.data.iterrows():
-                current_price = row[f"Close_{instrument}"]
+                current_price = row[f"{instrument}"]
 
                 # Check for buy/sell signals and update checkpoints
                 if row[f"Label_{instrument}"] == "Buy":
@@ -441,18 +454,18 @@ class BaseModel:
                 )
 
                 # Update DataFrame
-                self.data.at[
-                    today_date, f"DaysSincePeak_{instrument}"
-                ] = days_since_peak
-                self.data.at[
-                    today_date, f"DaysSinceTrough_{instrument}"
-                ] = days_since_bottom
-                self.data.at[
-                    today_date, f"PriceChangeSincePeak_{instrument}"
-                ] = price_change_since_peak
-                self.data.at[
-                    today_date, f"PriceChangeSinceTrough_{instrument}"
-                ] = price_change_since_bottom
+                self.data.at[today_date, f"DaysSincePeak_{instrument}"] = (
+                    days_since_peak
+                )
+                self.data.at[today_date, f"DaysSinceTrough_{instrument}"] = (
+                    days_since_bottom
+                )
+                self.data.at[today_date, f"PriceChangeSincePeak_{instrument}"] = (
+                    price_change_since_peak
+                )
+                self.data.at[today_date, f"PriceChangeSinceTrough_{instrument}"] = (
+                    price_change_since_bottom
+                )
 
     def compute_persistence_norms(self, persistence_diagram):
         """
@@ -486,7 +499,7 @@ class BaseModel:
             print(f"Calculating Betti curves and persistence norms for {instrument}")
 
             # Extract data for the instrument
-            data_series = self.data[f"Adj_Close_{instrument}"].dropna()
+            data_series = self.data[f"Adj_{instrument}"].dropna()
 
             # Create sliding windows
             sliding_window = SlidingWindow(size=w, stride=1)
@@ -547,7 +560,6 @@ class BaseModel:
         )
 
         print("check betti data: ", self.data)
-
 
     def calculate_first_second_order_derivatives(self):
         # Calculate first and second order derivatives for selected features
@@ -624,20 +636,40 @@ class BaseModel:
 
     def train_test_split_time_series(self):
         # Ensure 'Date' is the DataFrame index
-        if not isinstance(self.data.index, pd.DatetimeIndex):
-            self.data["Date"] = pd.to_datetime(self.data.index)
-            self.data.set_index("Date", inplace=True)
+        print(self.data)
+        print(self.data.index)
+        # if not isinstance(self.data.index, pd.DatetimeIndex):
+        #    self.data["Date"] = pd.to_datetime(self.data.index)
+        #    self.data.set_index("Date", inplace=True)
 
         # Sort the data by date to ensure correct time sequence
         self.data.sort_index(inplace=True)
 
+        print(self.train_start)
+        print(self.train_end)
+        self.data.reset_index(inplace=True)
+        print("HOW MANY DATA FRAMES DO YOU NEED")
+        print(self.data)
+
         # Filter the data for training and testing periods
-        self.train_data = self.data.loc[self.train_start : self.train_end].copy()
-        self.test_data = self.data.loc[self.test_start : self.test_end].copy()
+        # self.train_data = self.data.loc[self.train_start : self.train_end].copy()
+        # self.test_data = self.data.loc[self.test_start : self.test_end].copy()
+
+        # yea these are it
+        self._splitidx = self.data.iloc[self.train_end].name
+        self.train_data = self.data[self.train_start : self.train_end]
+        self.test_data = self.data[self.test_start : self.test_end]
+        print("TRAIN DATA FUCK")
+        print(self.train_data)
 
         # Calculate the age of each data point in days
-        current_date = pd.to_datetime(self.train_end)
-        self.train_data["DataAge"] = (current_date - self.train_data.index).days
+        current_date = pd.to_datetime(self.data.iloc[self.train_end]["Date"])
+        print(current_date)
+        self.train_data.set_index(["Date"], inplace=True)
+        self.test_data.set_index(["Date"], inplace=True)
+
+        self.train_data["DataAge"] = current_date - self.train_data.index
+        print(self.train_data["DataAge"])
 
         # Apply exponential decay to calculate weights
         decay_rate = 0.05  # This is a parameter you can tune

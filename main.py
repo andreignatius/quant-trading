@@ -1,7 +1,7 @@
 import pandas as pd
 import yfinance as yf
 import csv
-
+import math
 from training.logreg_model import LogRegModel
 from trading.trading_strategy import TradingStrategy
 
@@ -11,13 +11,18 @@ def fetch_and_format_data(tickers, start_date, end_date):
     try:
         data = yf.download(tickers, start=start_date, end=end_date)
         if data.empty:
-            raise ValueError(f"No data fetched for {tickers}. Please check your tickers or date range.")
+            raise ValueError(
+                f"No data fetched for {tickers}. Please check your tickers or date range."
+            )
 
         # Assuming the data might have multi-level columns, flatten them
         if isinstance(data.columns, pd.MultiIndex):
             for col in data.columns.values:
                 print("col: ", col)
-            data.columns = ['_'.join(col_tuple[0].split()) + '_' + col_tuple[1] for col_tuple in data.columns.values]
+            data.columns = [
+                "_".join(col_tuple[0].split()) + "_" + col_tuple[1]
+                for col_tuple in data.columns.values
+            ]
             print("data.columns: ", data.columns)
 
         data.index = pd.to_datetime(data.index)
@@ -30,7 +35,11 @@ def fetch_and_format_data(tickers, start_date, end_date):
 
 
 def rolling_window_train_predict(
-    data, start_date, end_date, train_duration_months, test_duration_months, trading_instrument
+    data,
+    start_date,
+    end_date,
+    train_ratio,
+    trading_instrument,
 ):
     trade_logs = []
     final_portfolio_values = []
@@ -43,16 +52,16 @@ def rolling_window_train_predict(
     while current_date < pd.to_datetime(end_date):
         print("Current period starting:", current_date)
 
-        train_start = current_date
-        train_end = train_start + pd.DateOffset(months=train_duration_months)
-        test_start = train_end
-        test_end = test_start + pd.DateOffset(months=test_duration_months)
+        # prepare data for train and out of sample
+        train_start = 0
+        train_end = math.floor(train_ratio * len(data))
+        oos_start = train_end + 1
+        oos_end = len(data) - 1
 
-        if test_end > pd.to_datetime(end_date):
-            break
-
-        train_data = data[(data.index >= train_start) & (data.index < train_end)]
-        test_data = data[(data.index >= test_start) & (data.index < test_end)]
+        # yea these are it
+        _splitidx = data.iloc[train_end].name
+        _training = data[train_start:train_end]
+        _oos = data[oos_start:oos_end]
 
         # Initialize and use the LogRegModel for this window
         print(
@@ -61,12 +70,17 @@ def rolling_window_train_predict(
             "train_end: ",
             train_end,
             "test_start: ",
-            test_start,
+            oos_start,
             "test_end: ",
-            test_end,
+            oos_end,
         )
         model = LogRegModel(
-            "inputs/temp_data.csv", train_start, train_end, test_start, test_end, trading_instrument
+            "rawr.csv",
+            train_start,
+            train_end,
+            oos_start,
+            oos_end,
+            trading_instrument,
         )
         model.load_preprocess_data()
         model.train_test_split_time_series()
@@ -83,7 +97,7 @@ def rolling_window_train_predict(
         interest_costs_total.append(sum(trading_results["Interest Costs"]))
         transaction_costs_total.append(trading_results["Transaction Costs"])
 
-        current_date += pd.DateOffset(months=test_duration_months)
+        # current_date += pd.DateOffset(months=test_duration_months)
 
     return (
         trade_logs,
@@ -94,51 +108,43 @@ def rolling_window_train_predict(
 
 
 if __name__ == "__main__":
-    tickers = [
-        "BZ=F",
-        "CL=F",
-        "GC=F",
-        "SI=F",
-        "NG=F",
-        "USDCAD=X",
-        "USDNOK=X",
-        "AUDUSD=X",
-        "NZDUSD=X",
-        "USDAUD=X",
-        "USDZAR=X",
-        "USDBRL=X",
-    ]
-    start_date = "2013-01-01"
-    end_date = "2023-01-01"
-    raw_data = fetch_and_format_data(tickers, start_date, end_date)
+    start_date = "2023-01-01"
+    end_date = "2024-05-31"
+    _item1 = "USDSGD=X"
+    _item2 = "DX-Y.NYB"
+    interval = "1h"
+    train_ratio = 0.8
 
-    raw_data.to_csv('inputs/temp_data.csv', index=True)
-
-    trading_instrument = "USDBRL=X"
+    raw_data = pd.read_csv("traderesult.csv")
+    raw_data = raw_data[["Datetime", "spread"]]
+    raw_data.columns = ["Date", "spread"]
+    print(raw_data)  # datetime not as index because
+    raw_data.to_csv("rawr.csv", index=False)
 
     trade_logs, final_values, interest_costs_total, transaction_costs_total = (
         rolling_window_train_predict(
             raw_data,
             start_date,
             end_date,
-            12,
-            6,  # 12 months training, 6 months testing
-            trading_instrument, # USDBRL testing
+            train_ratio,  # 12 months training, 6 months testing
+            "xoxox",  # USDBRL testing
         )
     )
-    
+
     # Specify the CSV file name
     filename = "trade_log.csv"
 
     # Open the file in write mode
-    with open(filename, mode='w', newline='') as file:
+    with open(filename, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow('trade_type,lcy_bought,lcy,rate,date,leverage,comment'.split(","))
+        writer.writerow(
+            "trade_type,lcy_bought,lcy,rate,date,leverage,comment".split(",")
+        )
         # Write each row of data
         for trade_period in trade_logs:
             for trade in trade_period:
                 print("trade: ", trade)
-                writer.writerow(trade.split(','))
+                writer.writerow(trade.split(","))
 
     print("Final trade logs:", trade_logs)
     print("Final portfolio values:", final_values)
