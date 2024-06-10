@@ -68,16 +68,18 @@ top_3_results = flattened_results.sort_values('P-Value').head(3)
 top_pairs = top_3_results[['Pair1', 'Pair2']].values.flatten()
 top_pairs = pd.unique(top_pairs)
 
-# Plot the FX data for the top pairs
+# Standard scale the FX rates
+standard_scaled_data = df_together[top_pairs].apply(lambda x: (x - x.mean()) / x.std())
+
+# Plot the standard scaled FX data for the top pairs
 plt.figure(figsize=(14, 7))
 
 for pair in top_pairs:
-    plt.plot(df_together[pair], label=pair)
+    plt.plot(standard_scaled_data[pair], label=pair)
 
-# plt.title('Top 3 Cointegrated FX Pairs')
 plt.xlabel('Date')
-plt.ylabel('Exchange Rate')
+plt.ylabel('Standard Scaled Exchange Rate')
 plt.legend()
-plt.savefig('X5_fx_eda.png')
+plt.savefig('X6_fx_eda_standard_scaled.png')
 plt.show()
 

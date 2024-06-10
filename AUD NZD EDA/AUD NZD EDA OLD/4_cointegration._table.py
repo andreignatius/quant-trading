@@ -1,95 +1,82 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
-from statsmodels.tsa.stattools import coint
+import math
+import itertools
+import statsmodels.tsa.stattools as ts
 import matplotlib.pyplot as plt
+import numpy as np
 
-def generate_cointegration_matrix(forex_pairs, start_date, end_date, interval='1d'):
-    # Create a DataFrame to store the adjusted close prices of all forex pairs
-    data = pd.DataFrame()
-
-    # Download the adjusted close prices for each forex pair
-    for forex in forex_pairs:
-        try:
-            data[forex] = yf.Ticker(forex).history(start=start_date, end=end_date, interval=interval)["Close"]
-        except Exception as e:
-            print(f"Error downloading data for {forex}: {e}")
-            data[forex] = pd.Series(dtype='float64')
-
-    # Replace infinite or missing values with NaN
-    data.replace([np.inf, -np.inf], np.nan, inplace=True)
-    data.dropna(inplace=True)
-
-    # Calculate cointegration and p-values
-    cointegration_results = pd.DataFrame(index=forex_pairs, columns=forex_pairs)
-    p_values = pd.DataFrame(index=forex_pairs, columns=forex_pairs)
-    
-    for i in range(len(forex_pairs)):
-        for j in range(i+1, len(forex_pairs)):
-            result = coint(data[forex_pairs[i]], data[forex_pairs[j]])
-            p_values.loc[forex_pairs[i], forex_pairs[j]] = result[1]
-            cointegration_results.loc[forex_pairs[i], forex_pairs[j]] = result[0]
-
-    # Stack the DataFrame to get pairs and their corresponding p-values and cointegration scores
-    p_values_stacked = p_values.stack().reset_index()
-    p_values_stacked.columns = ['Pair 1', 'Pair 2', 'P-Value']
-    
-    cointegration_stacked = cointegration_results.stack().reset_index()
-    cointegration_stacked.columns = ['Pair 1', 'Pair 2', 'Cointegration']
-
-    # Merge the DataFrames
-    merged_results = pd.merge(p_values_stacked, cointegration_stacked, on=['Pair 1', 'Pair 2'])
-
-    # Round p-values and cointegration values to 3 decimal places
-    merged_results['P-Value'] = merged_results['P-Value'].map(lambda x: f"{float(x):.5f}")
-    merged_results['Cointegration'] = merged_results['Cointegration'].map(lambda x: f"{float(x):.3f}")
-
-    # Sort the DataFrame by p-values and select top 10
-    top_10_results = merged_results.sort_values(by='P-Value').head(10)
-
-    return top_10_results
-
-
-# Usage
+# Forex pairs
 forex_pairs = [
-    "USDJPY=X",  # US Dollar / Japanese Yen
-    "USDEUR=X",  # US DOllar / Euro
-    "USDGBP=X",  # US Dollar / British Pound
-    "USDAUD=X",  # US Dollar / Australian Dollar
-    "USDNZD=X",  # US Dollar / New Zealand Dollar
-    "USDCAD=X",  # US Dollar / Canadian Dollar
-    "USDCHF=X",  # US Dollar / Swiss Franc
-    "USDSGD=X",  # US Dollar / Singapore Dollar
-    "USDMXN=X",  # US Dollar / Mexican Peso
-    "USDZAR=X",  # US Dollar / South African Rand
-    "USDSEK=X",  # US Dollar / Swedish Krona
-    "USDHKD=X",  # US Dollar / Hong Kong Dollar
-    "USDNOK=X",  # US Dollar / Norwegian Krone
-    "USDTRY=X",  # US Dollar / Turkish Lira
-    "USDRUB=X",  # US Dollar / Russian Ruble
-    "USDINR=X",  # US Dollar / Indian Rupee
-    "USDKRW=X",  # US Dollar / South Korean Won
-    "USDPHP=X",  # US Dollar / Philippine Peso
-    "USDTHB=X",  # US Dollar / Thai Baht
-    "USDMYR=X",  # US Dollar / Malaysian Ringgit
-    "USDIDR=X",  # US Dollar / Indonesian Rupiah
+    "JPYUSD=X", "EURUSD=X", "GBPUSD=X", "AUDUSD=X", "NZDUSD=X", 
+    "CADUSD=X", "CHFUSD=X", "SGDUSD=X", "MXNUSD=X", "ZARUSD=X", 
+    "SEKUSD=X", "HKDUSD=X", "NOKUSD=X", "TRYUSD=X", "INRUSD=X", 
+    "KRWUSD=X", "PHPUSD=X", "THBUSD=X", "IDRUSD=X"
 ]
 
-start_date = '2016-01-01'
-end_date = '2023-12-31'
-top_10_results = generate_cointegration_matrix(forex_pairs, start_date, end_date)
+# Parameters
+start_date = "2016-01-01"
+end_date = "2024-05-31"
+train_ratio = 0.7
+interval = "1d"
 
-plt.figure(figsize=(7, 6))  # Adjust figure size if needed
+# Fetch data
+currency_data = {}
+for pair in forex_pairs:
+    data = yf.Ticker(pair).history(start=start_date, end=end_date, interval=interval)["Close"]
+    currency_data[pair] = data
+
+# Align indices and remove NaN values
+df_together = pd.concat(currency_data.values(), axis=1, keys=currency_data.keys()).dropna()
+
+# Prepare train data
+train_end = math.floor(train_ratio * len(df_together))
+training = df_together.iloc[:train_end]
+
+# Initialize DataFrames to store cointegration test results and p-values
+cointegration_results = pd.DataFrame(index=forex_pairs, columns=forex_pairs)
+p_values = pd.DataFrame(index=forex_pairs, columns=forex_pairs)
+
+# Cointegration test
+for pair1, pair2 in itertools.combinations(forex_pairs, 2):
+    coint_result = ts.coint(training[pair1], training[pair2])
+    cointegration_results.loc[pair1, pair2] = coint_result[0]
+    cointegration_results.loc[pair2, pair1] = coint_result[0]
+    p_values.loc[pair1, pair2] = coint_result[1]
+    p_values.loc[pair2, pair1] = coint_result[1]
+
+# Flatten the DataFrame and sort by p-values
+flattened_results = p_values.stack().reset_index()
+flattened_results.columns = ['Pair1', 'Pair2', 'P-Value']
+flattened_results['Cointegration Score'] = flattened_results.apply(
+    lambda row: cointegration_results.loc[row['Pair1'], row['Pair2']], axis=1
+)
+
+# Remove duplicates by ensuring Pair1 < Pair2
+flattened_results['Ordered Pair'] = flattened_results.apply(
+    lambda row: tuple(sorted([row['Pair1'], row['Pair2']])), axis=1
+)
+flattened_results = flattened_results.drop_duplicates(subset=['Ordered Pair']).drop(columns=['Ordered Pair'])
+
+# Round p-values and cointegration scores
+flattened_results['P-Value'] = flattened_results['P-Value'].map(lambda x: f"{float(x):.5f}")
+flattened_results['Cointegration Score'] = flattened_results['Cointegration Score'].map(lambda x: f"{float(x):.3f}")
+
+# Get top 10 results by p-value
+top_10_results = flattened_results.sort_values('P-Value').head(10)
+
+# Create table of top 10 pairs
+plt.figure(figsize=(7, 6))
 table = plt.table(cellText=top_10_results.values,
                   colLabels=top_10_results.columns,
                   loc='center',
-                  cellLoc='center',  # Center the cell text
-                  colColours=['darkblue']*len(top_10_results.columns),  # Header color
-                  cellColours=[['white']*len(top_10_results.columns)]*len(top_10_results),  # Cell color
+                  cellLoc='center',
+                  colColours=['darkblue']*len(top_10_results.columns),
+                  cellColours=[['white']*len(top_10_results.columns)]*len(top_10_results),
                   )
 table.auto_set_font_size(False)
 table.set_fontsize(12)
-table.scale(1.2, 1.5)  # Scale down the table horizontally
+table.scale(1.2, 1.5)
 for key, cell in table.get_celld().items():
     if key[0] == 0:
         cell.set_text_props(color='white')
@@ -99,7 +86,7 @@ plt.axis('off')
 for key, cell in table._cells.items():
     cell._text.set_verticalalignment('center')
 
-plt.subplots_adjust(left=0.2, bottom=0.2, right=0.8, top=0.8)  # Adjust margins for full visibility
+plt.subplots_adjust(left=0.1, bottom=0.1, right=0.9, top=0.9)
 
 # Save the table as an image
 plt.savefig('X4_Cointegration_table.png')
