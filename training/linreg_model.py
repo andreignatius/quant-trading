@@ -3,6 +3,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from .base_model import BaseModel
 import numpy as np
+import pandas as pd
 
 class PCARSIModel(BaseModel):
     def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
@@ -48,8 +49,10 @@ class PCARSIModel(BaseModel):
         preds = self.model.predict(pca_data)
 
         signals = np.where(preds > self.long_thresh, 1, np.where(preds < self.short_thresh, -1, 0))
-
-        return signals
+        #Ensure that signals hold for 6 periods. If there is a same direction signal immediately after, won't enter new position but hold it for longer (e.g. count 6 days from new signal)
+        rolling_signals = pd.Series(signals).rolling(window=self.lookahead).mean() 
+        rolling_signals = np.where(abs(rolling_signals) > 0, np.sign(rolling_signals), 0)
+        return rolling_signals
     ######## Fix for 6-period holding #################
 
     def evaluate(self, X, y):
