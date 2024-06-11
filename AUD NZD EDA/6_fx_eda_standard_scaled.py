@@ -80,6 +80,7 @@ for pair in top_pairs:
 plt.xlabel('Date')
 plt.ylabel('Standard Scaled Exchange Rate')
 plt.legend()
+plt.legend()
 plt.savefig('X6_fx_eda_standard_scaled.png')
 plt.show()
 
