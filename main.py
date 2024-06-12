@@ -3,6 +3,7 @@ import yfinance as yf
 import csv
 
 from training.logreg_model import LogRegModel
+from training.linreg_model import PCARSIModel
 from trading.trading_strategy import TradingStrategy
 
 
@@ -73,17 +74,23 @@ def rolling_window_train_predict(
         model.train()
         test_data = model.retrieve_test_set()
 
-        model2 = LinearModel(
-            "inputs/temp_data.csv", train_start, train_end, test_start, test_end, trading_instrument
+        model2 = PCARSIModel(
+            "inputs/temp_data.csv", train_start, train_end, test_start, test_end, trading_instrument,"pcarsi"
         )
+        model2.load_preprocess_data()
+        model2.fit()
 
         # Instantiate the TradingStrategy class
         trading_strategy = TradingStrategy(model, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
         trading_strategy_2 = TradingStrategy(model2, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
-        trading_strategy_3 = TradingStrategy(rules, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
+        # trading_strategy_3 = TradingStrategy(rules, test_data, trading_instrument) # out of 5,000 USD, trade 3,750USD per shot
         trading_strategy.execute_trades()
         trading_strategy_2.execute_trades()
+
         trading_results = trading_strategy.evaluate_performance()
+        trading_results_2 = trading_strategy_2.evaluate_performance()
+
+        print("RACHEL TRADING: ", trading_results_2)
 
         trade_logs.append(trading_results["Trade Log"])
         final_portfolio_values.append(trading_results["Final Portfolio Value"])

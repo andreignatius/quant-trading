@@ -37,6 +37,8 @@ class TradingStrategy:
         # predicted_categories = self.model.predict()
         if self.is_rule_based:
             predicted_categories = self.model.final_rachel()
+        else:
+            predicted_categories = self.model.predict()
 
         for index, (row, prediction) in enumerate(
             zip(self.data.iterrows(), predicted_categories)

@@ -105,8 +105,9 @@ class BaseModel:
         self.calculate_aroon()
         self.ssl_channel()
 
-        self.nnfx_rule()
-        self.ssl_rule()
+        self.rsi_range()
+        # self.nnfx_rule()
+        # self.ssl_rule()
         self.lookahead_6steps()
 
         # self.integrate_tbill_data()
@@ -888,10 +889,10 @@ class BaseModel:
     
     def rsi_range(self, rsi_lbs = [i for i in range(2,25)]):
         for lb in rsi_lbs:
-            self.data[f'RSI_{lb}_{self.trading_instrument}'] = talib.RSI(self.data['Close'], lb)
+            self.data[f'RSI_{lb}_{self.trading_instrument}'] = talib.RSI(self.data[f'Close_{self.trading_instrument}'], lb)
     
     def lookahead_6steps(self, lookahead = 6):
-        self.data[f'pcarsi_y_{self.trading_instrument}'] = np.log(self.data['Close']).diff(lookahead).shift(-lookahead)
+        self.data[f'pcarsi_y_{self.trading_instrument}'] = np.log(self.data[f'Close_{self.trading_instrument}']).diff(lookahead).shift(-lookahead)
 
     def integrate_tbill_data(self):
         file_path_JPYTBill = "data/JPY_1Y_TBill_GJTB12MO.csv"
@@ -1010,6 +1011,7 @@ class BaseModel:
         self.data.ffill(inplace=True)
 
         if (self.model_name == "pcarsi"):
+            print("+++PCARSI+++")
             self.X_train = self.train_data[feature_set2]
             self.X_test = self.test_data[feature_set2]
             self.y_train = self.train_data[f"pcarsi_y_{self.trading_instrument}"]

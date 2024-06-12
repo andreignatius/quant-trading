@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 class PCARSIModel(BaseModel):
-    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument):
-        super().__init__(file_path, train_start, train_end, test_start, test_end, trading_instrument)
+    def __init__(self, file_path, train_start, train_end, test_start, test_end, trading_instrument, model_name):
+        super().__init__(file_path, train_start, train_end, test_start, test_end, trading_instrument, model_name)
         
         # self.rsi_lbs = [i for i in range(2,25)]
         self.n_components = 3
@@ -29,8 +29,17 @@ class PCARSIModel(BaseModel):
         print("check X train: ", self.X_train)
         print("check y train: ", self.y_train)
 
-        pca_X_train = self.X_train.iloc.dropna()
+        # pca_X_train = self.X_train.dropna()
+        # pca_y_train = self.y_train.loc[pca_X_train.index].dropna()
+
+        # Drop rows with NaN values in X_train
+        pca_X_train = self.X_train.dropna()
+
+        # Ensure y_train is aligned with the remaining X_train indices
         pca_y_train = self.y_train.loc[pca_X_train.index].dropna()
+
+        # Align indices again in case any NaNs were dropped from y_train
+        pca_X_train = pca_X_train.loc[pca_y_train.index]
 
         scaled_data = self.scaler.fit_transform(pca_X_train)
         pca_data = self.pca.fit_transform(scaled_data)
@@ -44,6 +53,7 @@ class PCARSIModel(BaseModel):
     def predict(self):
    
         rsis = self.X_test
+        print("++++check rsis: ++++", rsis)
         scaled_data = self.scaler.transform(rsis)
         pca_data = self.pca.transform(scaled_data)
         preds = self.model.predict(pca_data)
