@@ -62,6 +62,7 @@ class PCARSIModel(BaseModel):
         #Ensure that signals hold for 6 periods. If there is a same direction signal immediately after, won't enter new position but hold it for longer (e.g. count 6 days from new signal)
         rolling_signals = pd.Series(signals).rolling(window=self.lookahead).mean() 
         rolling_signals = np.where(abs(rolling_signals) > 0, np.sign(rolling_signals), 0)
+        print("+++rolling_signals+++: ", rolling_signals)
         return rolling_signals
     ######## Fix for 6-period holding #################
 
