@@ -1,5 +1,3 @@
-#### https://palomar.home.ece.ust.hk/MAFS5310_lectures/Rsession_pairs_trading_with_R.html#Trading_the_spread
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -71,7 +69,8 @@ plt.close()
 # Plot and save residual series
 plt.figure(figsize=(10, 7))
 plt.plot(residuals, label='Residuals', color='green')
-plt.title('Residual Series')
+plt.axhline(y=np.mean(residuals), color='red', linestyle='--', label='Mean')
+plt.title(f'Residual Series\nADF Statistic: {adf_result[0]:.4f}, p-value: {adf_result[1]:.4f}')
 plt.xlabel('Date')
 plt.ylabel('Residuals')
 plt.legend()
@@ -101,4 +100,3 @@ print(f'Standard Deviation of diff(GBPUSD): {sd_diff_gbpusd}')
 print(f'Standard Deviation of residuals: {sd_residuals}')
 print(f'Standard Deviation of innovations: {sd_innovations}')
 print(f'Half-life: {half_life}')
-
