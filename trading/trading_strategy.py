@@ -11,6 +11,7 @@ class TradingStrategy:
         leverage_factor=4,
         margin_call_threshold=0.5,
         annual_interest_rate=0.03,
+        is_rule_based = False,
     ):
         self.model = model
         self.data = data
@@ -27,12 +28,17 @@ class TradingStrategy:
         self.annual_interest_rate = annual_interest_rate
         self.daily_return_factors = []
         self.interest_costs = []
+        self.is_rule_based = is_rule_based
 
 
     def execute_trades(self):
         previous_prediction = None  # Initialize with no previous prediction
 
-        predicted_categories = self.model.predict()
+        # predicted_categories = self.model.predict()
+        if self.is_rule_based:
+            predicted_categories = self.model.final_rachel()
+        else:
+            predicted_categories = self.model.predict()
 
         for index, (row, prediction) in enumerate(
             zip(self.data.iterrows(), predicted_categories)
@@ -47,6 +53,8 @@ class TradingStrategy:
                 # print("Executing trade for date: ", current_date)
                 # print("Previous day prediction: ", previous_prediction)
                 # print("usd_lcy_spot_rate: ", usd_lcy_spot_rate)
+
+
 
                 is_stop_loss_triggered = self._check_stop_loss(
                     usd_lcy_spot_rate, current_date
