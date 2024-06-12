@@ -37,7 +37,7 @@ class OptimPort:
         rets = self.raw_rets@wts
         return ((rets-mean()/rets.std())*(freq**0.5))
 
-    def calc_port_std(self,wts, cov=None, freq =252):
+    def calc_port_std(self,wts, cov=None):
         '''
         This function calculates portfolio standard deviation
         Uses [weights transpose * covariance matrix * weights]
@@ -85,6 +85,39 @@ class OptimPort:
             return np.repeat(0,n)
         return weights.x
 
+    def get_corr_adjustment(self,corr=None):
+        '''
+        This function gets the correlation adjustment for which will serve as the denominator when 
+        we want to adjust our returns prediction for correlation of strategies.
+        Inputs:
+        1. corr: Correlation matri of our returns series
+        '''
+        if type(corr) not in [pd.DataFrame,pd.Series,np.array]:
+            corr = self.raw_rets.corr()
+
+        for i in range(len(corr)):
+            corr.iloc[i,i] = 0
+        #Get average of correlation of 1 asset vs the other assets
+        corr = corr.sum()/(len(corr)-1)
+        #Divide the correlation by the sum of the absolute numbers of all the correlations.
+        #This is so that the overall correlation adjustment is still equal to 1 and does not change absolute portfolio exposures
+        corr = corr/sum(abs(corr))
+        return abs(corr)
+
+    def get_corr_adjusted_weights(self,er = None,corr=None,dollar_neutralize = False):
+        if type(corr) not in [pd.DataFrame,pd.Series,np.array]:
+            corr = self.raw_rets.corr() 
+        if type(er) not in [pd.DataFrame,pd.Series,np.array]:
+            #Take weights as expected returns
+            weights = self.er 
+        else:
+            weights = er     
+        corr_adjustment = self.get_corr_adjustment(corr)
+        weights = weights/corr_adjustment
+        if dollar_neutralize == True:
+            weights = Implementation(weights).demean_and_delever_weights()
+
+        return weights
 
 
 
@@ -98,36 +131,52 @@ class Implementation:
         self.weights = weights
 
     def adjust_rebalance(self,threshold):
+        if type(weights) not in [pd.DataFrame,pd.Series,np.array]:
+            weights = self.weights
 
-        prev = [0] *self.weights.shape[1]
+        prev = [0] *weights.shape[1]
         weights_cleaned = []
-        for i in range(len(self.weights)):
+        for i in range(len(weights)):
             wts = []
-            temp = self.weights.iloc[i].values
+            temp = weights.iloc[i].values
             for w_i in range(len(temp)):
                 if abs(temp[w_i]-prev[w_i])>threshold:
                     wts.append(temp[w_i])
                 else:
-                    wts.append (prev[w_i])
+                    wts.append(prev[w_i])
             weights_cleaned.append(wts)
             prev = wts
-        weights_cleaned = pd.DataFrame(weights_cleaned, index = self.weights.index, columns = self.weights.columns)
+        weights_cleaned = pd.DataFrame(weights_cleaned, index = weights.index, columns = weights.columns)
         return weights_cleaned
 
-    def demean_and_delever_weights (self):
-        mean_wts = self.weights.mean(axis=1)
-        weights = self.weights.apply(lambda x: subtract_series(x))       
+    def demean_and_delever_weights (self,weights = None):
+        '''
+        Function dollar neutralizes a given position vector
+        First step is to demean the position vector, by subtracting the mean from each asset weight
+        Second step is to divide the weights by the sum of the absolute weights
+        Inputs:
+        1. weights: Position vector; if no input it will take in the weights inputted into the class object
+        '''
+        if type(weights) not in [pd.DataFrame,pd.Series,np.array]:
+            weights = self.weights
+        mean_wts = weights.mean(axis=1)
+
         def subtract_series(weights):
             return weights - mean_wts
+        weights = weights.apply(lambda x: subtract_series(x))       
+
         abs_w = abs(weights).sum(axis = 1) 
         def constraint_abs_wts(weights):
             return weights/abs_w
         weights = weights.apply(lambda x: constraint_abs_wts(x))
         return weights
 
-    def delever_weights(self):
-        abs_w =abs(self.weights).sum(axis = 1)
+    def delever_weights(self,weights = None):
+        if type(weights) not in [pd.DataFrame,pd.Series,np.array]:
+            weights = self.weights
+        abs_w =abs(weights).sum(axis = 1)
         def constraint_abs_w(weights):
             return weights/abs_w
-        weights = self.weights.apply(lambda x: constraint_abs_w(x))
+        weights = weights.apply(lambda x: constraint_abs_w(x))
         return weights   
+
