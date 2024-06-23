@@ -130,7 +130,7 @@ class Implementation:
     def __init__(self,weights):
         self.weights = weights
 
-    def adjust_rebalance(self,threshold):
+    def adjust_rebalance(self,threshold,weights = None):
         if type(weights) not in [pd.DataFrame,pd.Series,np.array]:
             weights = self.weights
 
